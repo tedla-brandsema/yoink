@@ -2,6 +2,7 @@ package zipline
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -122,7 +123,7 @@ func TestParse_Local(t *testing.T) {
 		}
 		defer src.Close()
 
-		parsed, err := Parse(src, root.Path)
+		parsed, err := Parse(context.Background(), src, root.Path)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -151,7 +152,7 @@ func TestParse_Remote(t *testing.T) {
 		}
 		defer src.Close()
 
-		parsed, err := Parse(src, root.Path)
+		parsed, err := Parse(context.Background(), src, root.Path)
 		if err != nil {
 			t.Fatal(err)
 		}

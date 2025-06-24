@@ -3,7 +3,6 @@ package zipline
 import (
 	"bufio"
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,37 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 )
 
 func init() {
-	//Register("zip", parseZip)
-	Register("zip", parallelParseZip)
-}
-
-func parallelParseZip(wg *sync.WaitGroup, errCh chan<- error, sourceFile string, lines *Lines, sourceLine int, cmd string) {
-	if wg == nil {
-		errCh <- errors.New("WaitGroup is nil")
-		return
-	}
-	wg.Add(1)
-
-	go func(wg *sync.WaitGroup) {
-		defer wg.Done()
-
-		var err error
-
-		t, err := parseZip(sourceFile, sourceLine, cmd)
-		if err != nil {
-			errCh <- err
-			return
-		}
-
-		if err = lines.set(t, sourceLine-1); err != nil {
-			errCh <- err
-			return
-		}
-	}(wg)
+	Register("zip", parseZip)
 }
 
 // parseZip parses an .zip directive:

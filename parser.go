@@ -2,6 +2,8 @@ package zipline
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -13,8 +15,7 @@ var (
 	parsers = make(map[string]ParseFunc)
 )
 
-// type ParseFunc func(fileName string, lineNumber int, inputLine string) (string, error)
-type ParseFunc func(wg *sync.WaitGroup, errCh chan<- error, fileName string, lines *Lines, lineNumber int, inputLine string)
+type ParseFunc func(fileName string, lineNumber int, inputLine string) (string, error)
 
 // Register binds the named action, which does not begin with a period, to the
 // specified parser to be invoked when the name, with a period, appears in the
@@ -28,7 +29,7 @@ func Register(name string, parser ParseFunc) {
 
 // Parse parses a document from r.
 // func Parse(r io.Reader, name string, mode ParseMode) (*Doc, error) {
-func Parse(r io.Reader, name string) (string, error) {
+func Parse(ctx context.Context, r io.Reader, name string) (string, error) {
 	lines, err := readLines(r)
 	if err != nil {
 		return "", err
@@ -36,7 +37,7 @@ func Parse(r io.Reader, name string) (string, error) {
 
 	lines.comment = "//"
 
-	if err = parseLines(name, lines); err != nil {
+	if err = parseLines(ctx, name, lines); err != nil {
 		return "", err
 	}
 
@@ -117,8 +118,7 @@ func (l *Lines) nextNonEmpty() (text string, ok bool) {
 	return
 }
 
-func parseLines(name string, lines *Lines) error {
-	//wg := &sync.WaitGroup{}
+func parseLines(ctx context.Context, name string, lines *Lines) error {
 	var wg sync.WaitGroup
 	errCh := make(chan error, 1)
 
@@ -134,25 +134,51 @@ func parseLines(name string, lines *Lines) error {
 		if strings.HasPrefix(text, ".") { // Handle command
 			args := strings.Fields(text)
 
-			parser := parsers[args[0]]
-			if parser == nil {
+			parse := parsers[args[0]]
+			if parse == nil {
 				log.Printf("%s:%d: unknown command %q", name, lines.line, text)
 				continue
 			}
-			parser(&wg, errCh, name, lines, lines.line, text)
+			parallelParse(&wg, errCh, parse, name, lines, lines.line, text)
 
 		}
 	}
 	select {
 	case err := <-errCh:
 		log.Fatalf("parsing failed: %v", err)
-	//case <-ctx.Done():
-	//	t.Fatalf("context cancelled: %v", ctx.Err())
+	case <-ctx.Done():
+		log.Fatalf("context cancelled: %v", ctx.Err())
 	case <-wait(&wg):
-		// All good
+		log.Println("done")
 	}
 	return nil
 }
+
+func parallelParse(wg *sync.WaitGroup, errCh chan<- error, parse ParseFunc, sourceFile string, lines *Lines, sourceLine int, cmd string) {
+	if wg == nil {
+		errCh <- errors.New("WaitGroup is nil")
+		return
+	}
+	wg.Add(1)
+
+	go func(wg *sync.WaitGroup) {
+		defer wg.Done()
+
+		var err error
+
+		t, err := parse(sourceFile, sourceLine, cmd)
+		if err != nil {
+			errCh <- err
+			return
+		}
+
+		if err = lines.set(t, sourceLine-1); err != nil {
+			errCh <- err
+			return
+		}
+	}(wg)
+}
+
 func wait(wg *sync.WaitGroup) <-chan struct{} {
 	done := make(chan struct{})
 	go func() {
