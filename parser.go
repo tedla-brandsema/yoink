@@ -4,14 +4,17 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"log"
 	"strings"
+	"sync"
 )
 
 var (
 	parsers = make(map[string]ParseFunc)
 )
 
-type ParseFunc func(fileName string, lineNumber int, inputLine string) (string, error)
+// type ParseFunc func(fileName string, lineNumber int, inputLine string) (string, error)
+type ParseFunc func(wg *sync.WaitGroup, errCh chan<- error, fileName string, lines *Lines, lineNumber int, inputLine string)
 
 // Register binds the named action, which does not begin with a period, to the
 // specified parser to be invoked when the name, with a period, appears in the
@@ -22,8 +25,6 @@ func Register(name string, parser ParseFunc) {
 	}
 	parsers["."+name] = parser
 }
-
-// TODO: user-agent for http(s) request
 
 // Parse parses a document from r.
 // func Parse(r io.Reader, name string, mode ParseMode) (*Doc, error) {
@@ -46,6 +47,7 @@ type Lines struct {
 	line    int // 0 indexed, so has 1-indexed number of last line returned
 	text    []string
 	comment string
+	mut     sync.RWMutex
 }
 
 func readLines(r io.Reader) (*Lines, error) {
@@ -57,10 +59,16 @@ func readLines(r io.Reader) (*Lines, error) {
 	if err := s.Err(); err != nil {
 		return nil, err
 	}
-	return &Lines{0, lines, "#"}, nil
+	return &Lines{
+		line:    0,
+		text:    lines,
+		comment: "#"}, nil
 }
 
 func (l *Lines) next() (text string, ok bool) {
+	l.mut.Lock()
+	defer l.mut.Unlock()
+
 	for {
 		current := l.line
 		l.line++
@@ -78,8 +86,11 @@ func (l *Lines) next() (text string, ok bool) {
 }
 
 func (l *Lines) set(txt string, line int) error {
+	l.mut.Lock()
+	defer l.mut.Unlock()
+
 	txtLen := len(l.text)
-	if line < 0 || line >= txtLen {
+	if line < 0 || line >= txtLen { // line number bounds check
 		return fmt.Errorf("unable to set line  #%d: out of bounds", line)
 	}
 	l.text[line] = txt
@@ -87,6 +98,9 @@ func (l *Lines) set(txt string, line int) error {
 }
 
 func (l *Lines) back() {
+	l.mut.Lock()
+	defer l.mut.Unlock()
+
 	l.line--
 }
 
@@ -104,6 +118,9 @@ func (l *Lines) nextNonEmpty() (text string, ok bool) {
 }
 
 func parseLines(name string, lines *Lines) error {
+	//wg := &sync.WaitGroup{}
+	var wg sync.WaitGroup
+	errCh := make(chan error, 1)
 
 	for i := 1; ; i++ {
 		text, ok := lines.nextNonEmpty()
@@ -119,16 +136,28 @@ func parseLines(name string, lines *Lines) error {
 
 			parser := parsers[args[0]]
 			if parser == nil {
-				return fmt.Errorf("%s:%d: unknown command %q", name, lines.line, text)
+				log.Printf("%s:%d: unknown command %q", name, lines.line, text)
+				continue
 			}
-			t, err := parser(name, lines.line, text)
-			if err != nil {
-				return err
-			}
-			if err = lines.set(t, lines.line-1); err != nil {
-				return err
-			}
+			parser(&wg, errCh, name, lines, lines.line, text)
+
 		}
 	}
+	select {
+	case err := <-errCh:
+		log.Fatalf("parsing failed: %v", err)
+	//case <-ctx.Done():
+	//	t.Fatalf("context cancelled: %v", ctx.Err())
+	case <-wait(&wg):
+		// All good
+	}
 	return nil
+}
+func wait(wg *sync.WaitGroup) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	return done
 }
