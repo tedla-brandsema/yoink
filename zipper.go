@@ -5,14 +5,70 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
+)
+
+type Semaphore struct {
+	sem chan struct{}
+}
+
+func NewSemaphore(max int) *Semaphore {
+	return &Semaphore{
+		sem: make(chan struct{}, max),
+	}
+}
+
+func (s *Semaphore) Acquire() {
+	s.sem <- struct{}{}
+}
+
+func (s *Semaphore) Release() {
+	<-s.sem
+}
+
+//type ThrottledSemaphore struct {
+//	sem    chan struct{}
+//	ticker *time.Ticker
+//}
+//
+//func NewThrottledSemaphore(maxConcurrent int, minInterval time.Duration) *ThrottledSemaphore {
+//	return &ThrottledSemaphore{
+//		sem:    make(chan struct{}, maxConcurrent),
+//		ticker: time.NewTicker(minInterval),
+//	}
+//}
+//
+//func (ts *ThrottledSemaphore) Acquire() {
+//	<-ts.ticker.C
+//	ts.sem <- struct{}{}
+//}
+//
+//func (ts *ThrottledSemaphore) Release() {
+//	<-ts.sem
+//}
+//
+//func (ts *ThrottledSemaphore) Stop() {
+//	ts.ticker.Stop()
+//}
+
+var (
+	zipSem   *Semaphore
+	throttle time.Duration
 )
 
 func init() {
+	if config.MaxConcurrent > 0 {
+		zipSem = NewSemaphore(config.MaxConcurrent)
+	}
+	if config.MinInterval > 0 {
+		throttle = config.MinInterval
+	}
 	Register("zip", parseZip)
 }
 
@@ -37,6 +93,14 @@ func parseZip(sourceFile string, sourceLine int, cmd string) (string, error) {
 	var err error
 
 	if strings.HasPrefix(file, "http://") || strings.HasPrefix(file, "https://") {
+		if zipSem != nil {
+			zipSem.Acquire()
+			defer zipSem.Release()
+		}
+		now := time.Now()
+		log.Printf("START[%d]", sourceLine)
+		time.Sleep(throttle)
+
 		uri, err := url.ParseRequestURI(file)
 		if err != nil {
 			return "", err
@@ -51,6 +115,7 @@ func parseZip(sourceFile string, sourceLine int, cmd string) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		log.Printf("END[%d]: %s", sourceLine, time.Since(now))
 	} else {
 		filename := filepath.Join(filepath.Dir(sourceFile), file)
 		textBytes, err = os.ReadFile(filename)
