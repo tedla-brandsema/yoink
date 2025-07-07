@@ -15,9 +15,8 @@ var config *Config
 // DefaultConfig returns a Config with logical, safe defaults.
 func DefaultConfig() *Config {
 	return &Config{
-		MaxConcurrent: 5,
-		//MinInterval:   200 * time.Millisecond,
-		MinInterval: 0 * time.Millisecond,
+		MaxConcurrent: 0,
+		MinInterval:   0 * time.Millisecond,
 	}
 }
 

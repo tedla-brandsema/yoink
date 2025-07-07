@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -31,31 +30,6 @@ func (s *Semaphore) Acquire() {
 func (s *Semaphore) Release() {
 	<-s.sem
 }
-
-//type ThrottledSemaphore struct {
-//	sem    chan struct{}
-//	ticker *time.Ticker
-//}
-//
-//func NewThrottledSemaphore(maxConcurrent int, minInterval time.Duration) *ThrottledSemaphore {
-//	return &ThrottledSemaphore{
-//		sem:    make(chan struct{}, maxConcurrent),
-//		ticker: time.NewTicker(minInterval),
-//	}
-//}
-//
-//func (ts *ThrottledSemaphore) Acquire() {
-//	<-ts.ticker.C
-//	ts.sem <- struct{}{}
-//}
-//
-//func (ts *ThrottledSemaphore) Release() {
-//	<-ts.sem
-//}
-//
-//func (ts *ThrottledSemaphore) Stop() {
-//	ts.ticker.Stop()
-//}
 
 var (
 	zipSem   *Semaphore
@@ -97,8 +71,6 @@ func parseZip(sourceFile string, sourceLine int, cmd string) (string, error) {
 			zipSem.Acquire()
 			defer zipSem.Release()
 		}
-		now := time.Now()
-		log.Printf("START[%d]", sourceLine)
 		time.Sleep(throttle)
 
 		uri, err := url.ParseRequestURI(file)
@@ -115,7 +87,6 @@ func parseZip(sourceFile string, sourceLine int, cmd string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		log.Printf("END[%d]: %s", sourceLine, time.Since(now))
 	} else {
 		filename := filepath.Join(filepath.Dir(sourceFile), file)
 		textBytes, err = os.ReadFile(filename)
