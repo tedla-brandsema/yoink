@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	outputFile := flag.String("o", "", "Output file (default: stdout)")
+	outputFile := flag.String("o", "", "Output file (defaults to stdout when omitted)")
 	flag.Usage = usage
 	flag.Parse()
 
@@ -65,16 +65,18 @@ func main() {
 
 func usage() {
 	w := tabwriter.NewWriter(os.Stderr, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(os.Stderr, "Usage:")
-	fmt.Fprintln(os.Stderr, "\tyoink [options] <inputFile>")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "\tyoink <inputFile>\tReads from file, writes to stdout")
-	fmt.Fprintln(os.Stderr, "\tyoink -o <outputFile>\tReads from stdin, writes to file")
-	fmt.Fprintln(os.Stderr, "\tyoink -o <outputFile> <inputFile>\tReads from file, writes to file")
-	fmt.Fprintln(os.Stderr, "\tcat file | yoink\tPipe input, writes to stdout")
-	fmt.Fprintln(os.Stderr, "\tcat file | yoink -o <outputFile>\tPipe input, writes to file")
-	fmt.Fprintln(os.Stderr, "\tyoink < file\tRedirect input, writes to stdout")
-	fmt.Fprintln(os.Stderr, "\tyoink -o <outputFile> < file\tRedirect input, writes to file")
-	flag.PrintDefaults()
+	fmt.Fprintln(w, "Usage:")
+	fmt.Fprintln(w, "\tyoink [options] <inputFile>")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "\tyoink <inputFile>\tReads from file, writes to stdout")
+	fmt.Fprintln(w, "\tyoink -o <outputFile>\tReads from stdin, writes to file")
+	fmt.Fprintln(w, "\tyoink -o <outputFile> <inputFile>\tReads from file, writes to file")
+	fmt.Fprintln(w, "\tcat file | yoink\tPipe input, writes to stdout")
+	fmt.Fprintln(w, "\tcat file | yoink -o <outputFile>\tPipe input, writes to file")
+	fmt.Fprintln(w, "\tyoink < file\tRedirect input, writes to stdout")
+	fmt.Fprintln(w, "\tyoink -o <outputFile> < file\tRedirect input, writes to file")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Options:")
 	w.Flush()
+	flag.PrintDefaults()
 }
