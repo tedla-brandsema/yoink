@@ -1,3 +1,6 @@
+// This file, or portions thereof, are derived from the Go Present tool,
+// licensed under the BSD 3-Clause License. See the NOTICE file for details.
+
 package yoink
 
 import (
