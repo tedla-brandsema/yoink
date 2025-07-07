@@ -1,4 +1,4 @@
-package zipline
+package yoink
 
 import (
 	"bufio"

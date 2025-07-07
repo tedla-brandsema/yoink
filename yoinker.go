@@ -1,4 +1,4 @@
-package zipline
+package yoink
 
 import (
 	"bufio"
@@ -32,29 +32,29 @@ func (s *Semaphore) Release() {
 }
 
 var (
-	zipSem   *Semaphore
-	throttle time.Duration
+	semaphore *Semaphore
+	throttle  time.Duration
 )
 
 func init() {
 	if config.MaxConcurrent > 0 {
-		zipSem = NewSemaphore(config.MaxConcurrent)
+		semaphore = NewSemaphore(config.MaxConcurrent)
 	}
 	if config.MinInterval > 0 {
 		throttle = config.MinInterval
 	}
-	Register("zip", parseZip)
+	Register("yoink", parseYoink)
 }
 
-// parseZip parses an .zip directive:
+// parseYoink parses a .yoink directive:
 //
-//	.zip <URL|filename> [address]
-func parseZip(sourceFile string, sourceLine int, cmd string) (string, error) {
+//	.yoink <URL|filename> [address]
+func parseYoink(sourceFile string, sourceLine int, cmd string) (string, error) {
 	cmd = strings.TrimSpace(cmd)
 
 	parts := strings.Fields(cmd)
 	if len(parts) < 2 {
-		return "", fmt.Errorf("%s:%d: syntax error for .inc invocation", sourceFile, sourceLine)
+		return "", fmt.Errorf("%s:%d: syntax error for .yoink invocation", sourceFile, sourceLine)
 	}
 
 	file := parts[1]
@@ -67,11 +67,11 @@ func parseZip(sourceFile string, sourceLine int, cmd string) (string, error) {
 	var err error
 
 	if strings.HasPrefix(file, "http://") || strings.HasPrefix(file, "https://") {
-		if zipSem != nil {
-			zipSem.Acquire()
-			defer zipSem.Release()
+		if semaphore != nil {
+			semaphore.Acquire()
+			defer semaphore.Release()
 		}
-		time.Sleep(throttle)
+		time.Sleep(throttle) // Should be a time.Ticker
 
 		uri, err := url.ParseRequestURI(file)
 		if err != nil {

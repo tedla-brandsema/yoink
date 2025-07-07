@@ -1,4 +1,4 @@
-package zipline
+package yoink
 
 import (
 	"bytes"
@@ -26,34 +26,34 @@ var (
 			Content: `
 1 line 
 // Full snippet1 
-.zip snippet1.txt
+.yoink snippet1.txt
 2 line 
 3 line 
 // Partial snippet1
-.zip snippet1.txt /START OMIT/,/END OMIT/
+.yoink snippet1.txt /START OMIT/,/END OMIT/
 4 line 
 // Named 'outer' snippet2 
-.zip snippet2.txt /START outer OMIT/,/END outer OMIT/
+.yoink snippet2.txt /START outer OMIT/,/END outer OMIT/
 5 line 
 // Named 'inner' snippet2 
-.zip snippet2.txt /START inner OMIT/,/END inner OMIT/
+.yoink snippet2.txt /START inner OMIT/,/END inner OMIT/
 `,
 		}, {
 			Name: "remote.txt",
 			Content: `
 1 line 
 // Full snippet1 
-.zip {{.BaseURL}}/snippet1.txt
+.yoink {{.BaseURL}}/snippet1.txt
 2 line 
 3 line 
 // Partial snippet1
-.zip {{.BaseURL}}/snippet1.txt /START OMIT/,/END OMIT/
+.yoink {{.BaseURL}}/snippet1.txt /START OMIT/,/END OMIT/
 4 line 
 // Named 'outer' snippet2 
-.zip {{.BaseURL}}/snippet2.txt /START outer OMIT/,/END outer OMIT/
+.yoink {{.BaseURL}}/snippet2.txt /START outer OMIT/,/END outer OMIT/
 5 line 
 // Named 'inner' snippet2 
-.zip {{.BaseURL}}/snippet2.txt /START inner OMIT/,/END inner OMIT/
+.yoink {{.BaseURL}}/snippet2.txt /START inner OMIT/,/END inner OMIT/
 `,
 		}, {
 

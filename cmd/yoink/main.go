@@ -7,7 +7,7 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/tedla-brandsema/zipline"
+	"github.com/tedla-brandsema/yoink"
 )
 
 func main() {
@@ -38,7 +38,7 @@ func main() {
 
 		if (info.Mode() & os.ModeCharDevice) != 0 {
 			// Stdin is a terminal - no piped input, no file provided
-			fmt.Fprintln(os.Stderr, "zipline: no input provided (expected piped input or file argument)")
+			fmt.Fprintln(os.Stderr, "yoink: no input provided (expected piped input or file argument)")
 			os.Exit(1)
 		}
 	}
@@ -54,7 +54,7 @@ func main() {
 		output = file
 	}
 
-	result, err := zipline.Parse(ctx, input, inputName)
+	result, err := yoink.Parse(ctx, input, inputName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Parsing error: %v\n", err)
 		os.Exit(1)
@@ -66,15 +66,15 @@ func main() {
 func usage() {
 	w := tabwriter.NewWriter(os.Stderr, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(os.Stderr, "Usage:")
-	fmt.Fprintln(os.Stderr, "\tzipline [options] <inputFile>")
+	fmt.Fprintln(os.Stderr, "\tyoink [options] <inputFile>")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "\tzipline <inputFile>\tReads from file, writes to stdout")
-	fmt.Fprintln(os.Stderr, "\tzipline -o <outputFile>\tReads from stdin, writes to file")
-	fmt.Fprintln(os.Stderr, "\tzipline -o <outputFile> <inputFile>\tReads from file, writes to file")
-	fmt.Fprintln(os.Stderr, "\tcat file | zipline\tPipe input, writes to stdout")
-	fmt.Fprintln(os.Stderr, "\tcat file | zipline -o <outputFile>\tPipe input, writes to file")
-	fmt.Fprintln(os.Stderr, "\tzipline < file\tRedirect input, writes to stdout")
-	fmt.Fprintln(os.Stderr, "\tzipline -o <outputFile> < file\tRedirect input, writes to file")
+	fmt.Fprintln(os.Stderr, "\tyoink <inputFile>\tReads from file, writes to stdout")
+	fmt.Fprintln(os.Stderr, "\tyoink -o <outputFile>\tReads from stdin, writes to file")
+	fmt.Fprintln(os.Stderr, "\tyoink -o <outputFile> <inputFile>\tReads from file, writes to file")
+	fmt.Fprintln(os.Stderr, "\tcat file | yoink\tPipe input, writes to stdout")
+	fmt.Fprintln(os.Stderr, "\tcat file | yoink -o <outputFile>\tPipe input, writes to file")
+	fmt.Fprintln(os.Stderr, "\tyoink < file\tRedirect input, writes to stdout")
+	fmt.Fprintln(os.Stderr, "\tyoink -o <outputFile> < file\tRedirect input, writes to file")
 	flag.PrintDefaults()
 	w.Flush()
 }

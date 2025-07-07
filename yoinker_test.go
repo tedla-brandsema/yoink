@@ -1,4 +1,4 @@
-package zipline
+package yoink
 
 import (
 	"os"
@@ -16,7 +16,7 @@ func writeTempFile(t *testing.T, dir, name, contents string) string {
 	return path
 }
 
-func TestParseZip(t *testing.T) {
+func TestParseYoink(t *testing.T) {
 	tmpDir := t.TempDir()
 	code := `
 package main
@@ -37,37 +37,37 @@ func main() {
 	}{
 		{
 			name:    "include full file",
-			cmd:     ".zip code.go",
+			cmd:     ".yoink code.go",
 			wantSub: `package main`,
 		},
 		//{
 		//	name:    "regex include",
-		//	cmd:     ".zip code.go /main/",
+		//	cmd:     ".yoink code.go /main/",
 		//	wantSub: `func main() {`,
 		//},
 		//{
 		//	name:    "line offset skip OMIT",
-		//	cmd:     ".zip code.go /main/+2",
+		//	cmd:     ".yoink code.go /main/+2",
 		//	wantSub: `fmt.Println("world")`,
 		//},
 		{
 			name:    "invalid command syntax",
-			cmd:     ".zip",
+			cmd:     ".yoink",
 			wantErr: true,
 		},
 		{
 			name:    "nonexistent file",
-			cmd:     ".zip nofile.go",
+			cmd:     ".yoink nofile.go",
 			wantErr: true,
 		},
 		{
 			name:    "bad regex",
-			cmd:     `.zip code.go /[unclosed/`,
+			cmd:     `.yoink code.go /[unclosed/`,
 			wantErr: true,
 		},
 		{
 			name:    "reverse search unsupported",
-			cmd:     `.zip code.go -/main/`,
+			cmd:     `.yoink code.go -/main/`,
 			wantErr: true,
 		},
 	}
@@ -76,7 +76,7 @@ func main() {
 		t.Run(tt.name, func(t *testing.T) {
 			sourceFile := filepath.Join(tmpDir, "doc.txt") // fake doc location
 			cmd := strings.Replace(tt.cmd, "code.go", filepath.Base(codeFile), 1)
-			out, err := parseZip(sourceFile, 10, cmd)
+			out, err := parseYoink(sourceFile, 10, cmd)
 
 			if tt.wantErr {
 				if err == nil {
