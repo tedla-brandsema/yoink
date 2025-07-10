@@ -171,7 +171,7 @@ func parseLines(ctx context.Context, name string, lines *Lines) error {
 				log.Printf("%s:%d: unknown command %q", name, lines.line, text)
 				continue
 			}
-			parallelParse(pc, parse, name, lines, lines.line, text)
+			concurrentParse(pc, parse, name, lines, lines.line, text)
 
 		}
 	}
@@ -181,7 +181,7 @@ func parseLines(ctx context.Context, name string, lines *Lines) error {
 	return nil
 }
 
-func parallelParse(pc *ParallelContext, parse ParseFunc, sourceFile string, lines *Lines, sourceLine int, cmd string) {
+func concurrentParse(pc *ParallelContext, parse ParseFunc, sourceFile string, lines *Lines, sourceLine int, cmd string) {
 	pc.WG.Add(1)
 
 	go func() {
