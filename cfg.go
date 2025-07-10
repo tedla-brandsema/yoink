@@ -4,28 +4,29 @@ import (
 	"time"
 )
 
-// Config holds global configuration options for the package.
-type Config struct {
+type Configurable interface {
+	Configure()
+}
+
+type config struct {
 	MaxConcurrent int
 	MinInterval   time.Duration
 }
 
-var config *Config
+var Config *config
 
-// DefaultConfig returns a Config with logical, safe defaults.
-func DefaultConfig() *Config {
-	return &Config{
-		MaxConcurrent: 0,
-		MinInterval:   0 * time.Millisecond,
+const (
+	defaultMaxConcurrent = 5
+	defaultMinInterval   = 200 * time.Millisecond
+)
+
+func defaultConfig() *config {
+	return &config{
+		MaxConcurrent: defaultMaxConcurrent,
+		MinInterval:   defaultMinInterval,
 	}
 }
 
-// InitConfig initializes the global config instance.
-// Should be called during package init or main().
-func InitConfig(cfg *Config) {
-	config = cfg
-}
-
 func init() {
-	InitConfig(DefaultConfig())
+	Config = defaultConfig()
 }
