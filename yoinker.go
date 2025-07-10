@@ -35,24 +35,28 @@ func (s *Semaphore) Release() {
 }
 
 var (
-	semaphore *Semaphore
-	throttle  time.Duration
+	sem      *Semaphore
+	throttle time.Duration
 )
 
-func init() {
-	if config.MaxConcurrent > 0 {
-		semaphore = NewSemaphore(config.MaxConcurrent)
+func configure() {
+	if Config.MaxConcurrent > 0 {
+		sem = NewSemaphore(Config.MaxConcurrent)
 	}
-	if config.MinInterval > 0 {
-		throttle = config.MinInterval
+	if Config.MinInterval > 0 {
+		throttle = Config.MinInterval
 	}
-	Register("yoink", parseYoink)
 }
 
-// parseYoink parses a .yoink directive:
+func init() {
+	configure()
+	RegisterParserFunc("yoink", yoinkParser)
+}
+
+// yoinkParser parses a .yoink directive:
 //
 //	.yoink <URL|filename> [address]
-func parseYoink(sourceFile string, sourceLine int, cmd string) (string, error) {
+func yoinkParser(sourceFile string, sourceLine int, cmd string) (string, error) {
 	cmd = strings.TrimSpace(cmd)
 
 	parts := strings.Fields(cmd)
@@ -70,9 +74,9 @@ func parseYoink(sourceFile string, sourceLine int, cmd string) (string, error) {
 	var err error
 
 	if strings.HasPrefix(file, "http://") || strings.HasPrefix(file, "https://") {
-		if semaphore != nil {
-			semaphore.Acquire()
-			defer semaphore.Release()
+		if sem != nil {
+			sem.Acquire()
+			defer sem.Release()
 		}
 		time.Sleep(throttle) // Should be a time.Ticker
 

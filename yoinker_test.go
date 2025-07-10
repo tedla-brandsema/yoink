@@ -76,7 +76,7 @@ func main() {
 		t.Run(tt.name, func(t *testing.T) {
 			sourceFile := filepath.Join(tmpDir, "doc.txt") // fake doc location
 			cmd := strings.Replace(tt.cmd, "code.go", filepath.Base(codeFile), 1)
-			out, err := parseYoink(sourceFile, 10, cmd)
+			out, err := yoinkParser(sourceFile, 10, cmd)
 
 			if tt.wantErr {
 				if err == nil {

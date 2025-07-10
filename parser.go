@@ -13,48 +13,60 @@ import (
 	"sync"
 )
 
-type ParallelContext struct {
+type ConcurrentContext struct {
 	Ctx   context.Context
 	WG    *sync.WaitGroup
 	errCh chan error
 }
 
-func (pc *ParallelContext) ErrCh() <-chan error {
-	return pc.errCh
+func (c *ConcurrentContext) ErrCh() <-chan error {
+	return c.errCh
 }
 
-func (pc *ParallelContext) SendErr(err error) {
+func (c *ConcurrentContext) SendErr(err error) {
 	select {
-	case pc.errCh <- err:
+	case c.errCh <- err:
 	default:
 	}
 }
 
-func (pc *ParallelContext) Wait() error {
+func (c *ConcurrentContext) Wait() error {
 	select {
-	case err := <-pc.errCh:
+	case err := <-c.errCh:
 		return fmt.Errorf("parsing failed: %w", err)
-	case <-pc.Ctx.Done():
-		return fmt.Errorf("context cancelled: %w", pc.Ctx.Err())
-	case <-wait(pc.WG):
+	case <-c.Ctx.Done():
+		return fmt.Errorf("context cancelled: %w", c.Ctx.Err())
+	case <-wait(c.WG):
 		return nil
 	}
 }
 
 var (
-	parsers = make(map[string]ParseFunc)
+	parsersMu sync.RWMutex
+	parsers   = make(map[string]Parser)
 )
+
+type Parser interface {
+	Parse(fileName string, lineNumber int, inputLine string) (string, error)
+}
 
 type ParseFunc func(fileName string, lineNumber int, inputLine string) (string, error)
 
-// Register binds the named action, which does not begin with a period, to the
-// specified parser to be invoked when the name, with a period, appears in the
-// present input text.
-func Register(name string, parser ParseFunc) {
+func (p ParseFunc) Parse(fileName string, lineNumber int, inputLine string) (string, error) {
+	return p(fileName, lineNumber, inputLine)
+}
+
+func RegisterParser(name string, parser Parser) {
 	if len(name) == 0 || name[0] == ';' {
-		panic("bad name in Register: " + name)
+		panic("invalid parser name: " + name)
 	}
+	parsersMu.Lock()
+	defer parsersMu.Unlock()
 	parsers["."+name] = parser
+}
+
+func RegisterParserFunc(name string, fn ParseFunc) {
+	RegisterParser(name, fn)
 }
 
 // Parse parses a document from r.
@@ -148,7 +160,7 @@ func (l *Lines) nextNonEmpty() (text string, ok bool) {
 }
 
 func parseLines(ctx context.Context, name string, lines *Lines) error {
-	pc := &ParallelContext{
+	pc := &ConcurrentContext{
 		Ctx:   ctx,
 		WG:    &sync.WaitGroup{},
 		errCh: make(chan error, 1),
@@ -181,13 +193,13 @@ func parseLines(ctx context.Context, name string, lines *Lines) error {
 	return nil
 }
 
-func concurrentParse(pc *ParallelContext, parse ParseFunc, sourceFile string, lines *Lines, sourceLine int, cmd string) {
+func concurrentParse(pc *ConcurrentContext, parser Parser, sourceFile string, lines *Lines, sourceLine int, cmd string) {
 	pc.WG.Add(1)
 
 	go func() {
 		defer pc.WG.Done()
 
-		t, err := parse(sourceFile, sourceLine, cmd)
+		t, err := parser.Parse(sourceFile, sourceLine, cmd)
 		if err != nil {
 			pc.SendErr(err)
 			return
