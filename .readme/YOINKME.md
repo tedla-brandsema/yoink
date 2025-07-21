@@ -4,7 +4,7 @@ built to include files (or parts thereof) into another file, concurrently. Those
 You can extend _Yoink_ by creating your own command by implementing the `yoink.ParserFunc`
 and then registering it with `yoink.Register`.
 
-You can use _Yoink_ as a library or as a commandline tool. See [TODO: heading] for instructions on how to use _Yoink_ on the 
+_Yoink_ is  available as a library or as a commandline tool. See [TODO: heading] for instructions on how to use _Yoink_ on the 
 commandline.
 
 NOTE:
@@ -62,20 +62,18 @@ To let Yoink resolve this, we first need to open our root file and then pass it 
 .yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/1_local/main.go
 ```
 
-## Considerations For Working With Local Files
+## Considerations When Working With Local Files
 
-_Yoink_ parses commands concurrently. When it comes to accessing the same file through multiple `.yoink` commands,
-this is generally considered safe _if you're only reading_. This means that functions like: `os.ReadFile`, `os.Open` and 
-`os.OpenFile(name, O_RDONLY, 0)` are considered safe, since each call returns its own _file descriptor_. One caveat here 
-is that you can hit the file descriptor limit (`ulimit -n`), but this is unlikely to happen unless scaled up to thousands 
-of goroutines.
+_Yoink_ parses commands concurrently. If you want to create your own parser, you need to take the following 
+considerations into account:
 
-Other considerations:
-* Race conditions when modifying data.
-* Hammering the I/O subsystem when reading repeatedly from disk.
-
-_Yoink_ builtin commands take this into consideration,
-but if you were to create your own parser, you need to take the above into consideration. 
+* Accessing the same file concurrently is generally considered safe _as long as you're only reading_. 
+This means that functions like:`os.ReadFile`, `os.Open` and `os.OpenFile(name, O_RDONLY, 0)` are safe to use in your parser.
+* Since each call to the functions mentioned above returns its own _file descriptor_, there is a change that you might 
+hit the file descriptor limit (`ulimit -n`). This is unlikely to happen unless scaled up to thousands of goroutines.
+* Hammering the I/O subsystem is a possibility when reading repeatedly from disk, but unlikely to happen.
+* Using `bufio.Reader` or similar on top of `*os.File` in multiple goroutines is **NOT** safe, if they share the same `*os.File`.
+* If you do decide to modify data on disk from inside your parser, race conditions might occur. You need to manage that yourself.
 
 # Working With Remote Files
 
@@ -101,11 +99,106 @@ commands that point to local files.
 goes for commands you might implement yourself using `yoink.ParserFunc` and then register using `yoink.Register`. 
 All commands that are registered with Yoink can be called from within the file that is parsed._
 
-# Regular Expressions
+# The address argument
 
-Yoinks most useful and powerful feature is the ability to add a regular expression to the end of a `.yoink` command.
+Yoinks most useful and powerful feature is the ability to target a specific region by adding an address at the end 
+of a `.yoink` command.
 
-In our previous examples, we only included entire files into our _base_ or _root_ file. Regular expressions, however, 
-allow the user to target a specific region or excerpt from a file.
+The address syntax is similar in its simplest form to that of ed, but comes from sam and is more general. See 
+[Table II](https://plan9.io/sys/doc/sam/sam.html) for full details. 
+The displayed block is always rounded out to a full line at both ends.
+
+In our previous examples, we only included entire files into our _base_ file. With the help of addresses, however, 
+we can target a specific region or excerpt from a file.
+
+
+Consider the following _base_ file. You can find the full example
+[here](https://github.com/tedla-brandsema/examples/tree/main/yoink/3_address).
+
+```
+.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/3_address/data/sonnet-18-jumbled.txt
+```
+
+Here you can see that all `.yoink` commands that point to `sonnet-18-quatrains.txt` have a second argument; an address.
+
+For example, address of the first `.yoink` command reads as follows:
+```
+/START stanza-2/,/END stanza-2/
+```
+
+If you take a look at [Table II](https://plan9.io/sys/doc/sam/sam.html), we see that we have a regular expression 
+`/START stanza-2/` followed by the address mark `,` and finally we have a second regular expression 
+`/END stanza-2/`. The regular expressions here are just literal matches, but note that you can use regex syntax.
+
+The regular expressions in our _base_ file correspond to addresses in our target file: sonnet-18-quatrains.txt. See below:
+```
+.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/3_address/data/sonnet-18-quatrains.txt
+```
+
+Running our jumbled _base_ file with Yoink, yields the following result.
+```
+.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/3_address/data/result.txt
+```
+
+So we succeeded in jumbling the output using addresses, but the address demarcations ended up in the resulting output. 
+
+Luckily we have a way to circumvent this; any line in the program that ends with the four characters `OMIT`is deleted 
+from the source before inclusion.
+
+So if we were to change our _base_ file to:
+```
+Sonnet 18: Shall I compare thee to a summer’s day?
+By William Shakespeare
+
+.yoink sonnet-18-quatrains.txt /START stanza-2 OMIT/,/END stanza-2 OMIT/
+.yoink sonnet-18-rhyming-couplet.txt
+.yoink sonnet-18-quatrains.txt /START stanza-3 OMIT/,/END stanza-3 OMIT/
+.yoink sonnet-18-quatrains.txt /START stanza-1 OMIT/,/END stanza-1 OMIT/
+```
+
+And our sonnet-18-quatrains.txt file to:
+```
+#START stanza-1 OMIT
+Shall I compare thee to a summer’s day?
+Thou art more lovely and more temperate:
+Rough winds do shake the darling buds of May,
+And summer’s lease hath all too short a date;
+#END stanza-1 OMIT
+#START stanza-2 OMIT
+Sometime too hot the eye of heaven shines,
+And often is his gold complexion dimm'd;
+And every fair from fair sometime declines,
+By chance or nature’s changing course untrimm'd;
+#END stanza-2 OMIT
+#START stanza-3 OMIT
+But thy eternal summer shall not fade,
+Nor lose possession of that fair thou ow’st;
+Nor shall death brag thou wander’st in his shade,
+When in eternal lines to time thou grow’st:
+#END stanza-3 OMIT
+```
+
+The result would be as follows:
+```
+Sonnet 18: Shall I compare thee to a summer’s day?
+By William Shakespeare
+
+Sometime too hot the eye of heaven shines,
+And often is his gold complexion dimm'd;
+And every fair from fair sometime declines,
+By chance or nature’s changing course untrimm'd;
+So long as men can breathe or eyes can see,
+So long lives this, and this gives life to thee.
+But thy eternal summer shall not fade,
+Nor lose possession of that fair thou ow’st;
+Nor shall death brag thou wander’st in his shade,
+When in eternal lines to time thou grow’st:
+Shall I compare thee to a summer’s day?
+Thou art more lovely and more temperate:
+Rough winds do shake the darling buds of May,
+And summer’s lease hath all too short a date;
+```
+
+Still jumbled, but without our address demarcations.
 
 
