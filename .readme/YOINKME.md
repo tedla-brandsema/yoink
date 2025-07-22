@@ -1,8 +1,7 @@
 _Yoink_ is a stripped-down version of the [GO present tool](https://pkg.go.dev/golang.org/x/tools/present). _Yoink_ is 
 built to include files (or parts thereof) into another file, concurrently. Those files can be included locally or over http(s).
 
-You can extend _Yoink_ by creating your own command by implementing the `yoink.ParserFunc`
-and then registering it with `yoink.Register`.
+You can extend _Yoink_ by [creating your own command](#creating-your-own-command). 
 
 _Yoink_ is  available as a library or as a commandline tool. See [TODO: heading] for instructions on how to use _Yoink_ on the 
 commandline.
@@ -35,7 +34,7 @@ of the library.
 go get -u github.com/tedla-brandsema/yoink@latest
 ```
 
-Then, import Yoink in your application:
+Then, import _Yoink_ in your application:
 
 ```go
 import "github.com/tedla-brandsema/yoink"
@@ -55,7 +54,7 @@ Below is an example file that contains two such commands. You can find the full 
 
 One command pointing to `sonnet-18-quatrains.txt` and the other to `sonnet-18-rhyming-couplet.txt`.
 
-To let Yoink resolve this, we first need to open our root file and then pass it to `yoink.Parse` in the form of an
+To let _Yoink_ resolve this, we first need to open our root file and then pass it to `yoink.Parse` in the form of an
 `io.Reader`.
 
 ```go
@@ -97,19 +96,19 @@ commands that point to local files.
 **Q: _Can you add local and remote `.yoink` commands to the same file?_**  
 **A:** _Absolutely you can. In fact, this is a crucial concept to grasp; every command is parsed individually. This also 
 goes for commands you might implement yourself using `yoink.ParserFunc` and then register using `yoink.Register`. 
-All commands that are registered with Yoink can be called from within the file that is parsed._
+All commands that are registered with _Yoink_ can be called from within the file that is parsed._
 
-# The address argument
+# The Address Argument
 
 Yoinks most useful and powerful feature is the ability to target a specific region by adding an address at the end 
 of a `.yoink` command.
 
 The address syntax is similar in its simplest form to that of ed, but comes from sam and is more general. See 
-[Table II](https://plan9.io/sys/doc/sam/sam.html) for full details. 
+[Table II](https://plan9.io/sys/doc/sam/sam.html) of _The Text Editor sam_ manual for full details. 
 The displayed block is always rounded out to a full line at both ends.
 
-In our previous examples, we only included entire files into our _base_ file. With the help of addresses, however, 
-we can target a specific region or excerpt from a file.
+In our previous examples, we only included entire files into our _base_ file. With the help of the address argument, 
+however, we can target a specific region or excerpt from a file.
 
 
 Consider the following _base_ file. You can find the full example
@@ -121,28 +120,29 @@ Consider the following _base_ file. You can find the full example
 
 Here you can see that all `.yoink` commands that point to `sonnet-18-quatrains.txt` have a second argument; an address.
 
-For example, address of the first `.yoink` command reads as follows:
+For example, the address of the first `.yoink` command reads as follows:
 ```
 /START stanza-2/,/END stanza-2/
 ```
 
-If you take a look at [Table II](https://plan9.io/sys/doc/sam/sam.html), we see that we have a regular expression 
-`/START stanza-2/` followed by the address mark `,` and finally we have a second regular expression 
-`/END stanza-2/`. The regular expressions here are just literal matches, but note that you can use regex syntax.
+If you take a look at [Table II](https://plan9.io/sys/doc/sam/sam.html) of _The Text Editor sam_ manual, 
+we see that we have a regular expression`/START stanza-2/` followed by the address mark `,` and finally we have a second 
+regular expression `/END stanza-2/`. The regular expressions here are just literal matches, 
+but note that you can use more involved regular expression pattern matching syntax.
 
-The regular expressions in our _base_ file correspond to addresses in our target file: sonnet-18-quatrains.txt. See below:
+The addresses in our _base_ file correspond to demarcations in our target file: sonnet-18-quatrains.txt. See below:
 ```
 .yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/3_address/data/sonnet-18-quatrains.txt
 ```
 
-Running our jumbled _base_ file with Yoink, yields the following result.
+Running our jumbled _base_ file with _Yoink_, yields the following result.
 ```
 .yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/3_address/data/result.txt
 ```
 
 So we succeeded in jumbling the output using addresses, but the address demarcations ended up in the resulting output. 
 
-Luckily we have a way to circumvent this; any line in the program that ends with the four characters `OMIT`is deleted 
+Luckily we have a way to circumvent this; any line in the program that ends with the four characters `OMIT` is deleted 
 from the source before inclusion.
 
 So if we were to change our _base_ file to:
@@ -156,7 +156,7 @@ By William Shakespeare
 .yoink sonnet-18-quatrains.txt /START stanza-1 OMIT/,/END stanza-1 OMIT/
 ```
 
-And our sonnet-18-quatrains.txt file to:
+And our `sonnet-18-quatrains.txt` file to:
 ```
 #START stanza-1 OMIT
 Shall I compare thee to a summer’s day?
@@ -199,6 +199,93 @@ Rough winds do shake the darling buds of May,
 And summer’s lease hath all too short a date;
 ```
 
-Still jumbled, but without our address demarcations.
+The result is still jumbled, but no longer contains the address demarcations.
 
 
+# Creating Your Own Command
+
+You create your own command by first creating a parser and then registering the parser with its accompanying command string.
+
+There are two ways of creating your own parser:
+1. Implement `yoink.ParseFunc`.
+2. Implement `yoink.Parser`.
+
+The former is stateless and therefore the preferred method for creating your own command. The latter provides a manner 
+to introduce state.
+
+## Stateless
+
+Let's start out by creating a stateless parser by implementing the `yoink.ParseFunc`. You can find the full example 
+[here](https://github.com/tedla-brandsema/examples/tree/main/yoink/4_stateless).
+
+
+```go
+.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/4_stateless/main.go /START ParseFunc OMIT/,/END ParseFunc OMIT/
+```
+
+We also need to register our `HelloParser` with _Yoink_:
+```go
+.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/4_stateless/main.go /START RegisterParserFunc OMIT/,/END RegisterParserFunc OMIT/
+```
+
+After that we can parse files containing `.hello` commands like the one below:
+```
+.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/4_stateless/data/hello.txt
+```
+
+The full stateless example looks like this:
+```go
+.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/4_stateless/main.go 
+```
+
+## Stateful
+
+If you need shared state between invocations of your parser, you need to implement `yoink.Parser`.
+
+Let's create a parser that counts how many times it has been invoked. You can find the full example 
+[here](https://github.com/tedla-brandsema/examples/tree/main/yoink/5_stateful)
+
+First, we need to create our parser:
+
+```go
+.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/5_stateful/main.go /START Parser OMIT/,/END Parser OMIT/
+```
+
+
+After that, we need to register an instance of our parser:
+```go
+.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/5_stateful/main.go /START RegisterParser OMIT/,/END RegisterParser OMIT/
+```
+
+
+After that we can parse a file containing `.count` commands, with the full example below:
+```go
+.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/5_stateful/main.go
+```
+A possible result from running this example is shown below. It should immediately become clear that sharing state might 
+not yield the desired results. Here we see that evidence that the order in which the goroutines are started does not 
+guarantee the order in which they are returned.
+
+```
+Command ".count" has been invoked 3 times
+Command ".count" has been invoked 4 times
+Command ".count" has been invoked 1 times
+Command ".count" has been invoked 7 times
+Command ".count" has been invoked 5 times
+Command ".count" has been invoked 12 times
+Command ".count" has been invoked 2 times
+Command ".count" has been invoked 6 times
+Command ".count" has been invoked 8 times
+Command ".count" has been invoked 9 times
+Command ".count" has been invoked 10 times
+Command ".count" has been invoked 11 times
+Command ".count" has been invoked 13 times
+Command ".count" has been invoked 14 times
+Command ".count" has been invoked 17 times
+Command ".count" has been invoked 19 times
+Command ".count" has been invoked 15 times
+Command ".count" has been invoked 16 times
+Command ".count" has been invoked 18 times
+```
+
+So be cautious when choosing a stateful over a stateless parser. 
