@@ -49,7 +49,12 @@ Below is an example file that contains two such commands. You can find the full 
 [here](https://github.com/tedla-brandsema/examples/tree/main/yoink/1_local).
 
 ```
-.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/1_local/data/sonnet-18.txt
+Sonnet 18: Shall I compare thee to a summer’s day?
+By William Shakespeare
+
+.yoink sonnet-18-quatrains.txt
+
+.yoink sonnet-18-rhyming-couplet.txt
 ```
 
 One command pointing to `sonnet-18-quatrains.txt` and the other to `sonnet-18-rhyming-couplet.txt`.
@@ -58,7 +63,31 @@ To let _Yoink_ resolve this, we first need to open our root file and then pass i
 `io.Reader`.
 
 ```go
-.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/1_local/main.go
+package main
+
+import (
+	"context"
+	"fmt"
+	"github.com/tedla-brandsema/yoink"
+	"os"
+)
+
+func main() {
+	// Open the root file
+	name := "./data/sonnet-18.txt"
+	file, err := os.Open(name)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	// Resolve .yoink commands in the root file
+	txt, err := yoink.Parse(context.Background(), file, name)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(txt)
+}
 ```
 
 
@@ -71,14 +100,43 @@ In the example below, there are two `.yoink` commands pointing to URLs with raw 
 [here](https://github.com/tedla-brandsema/examples/tree/main/yoink/2_remote).
 
 ```
-.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/2_remote/data/sonnet-18-remote.txt
+Sonnet 18: Shall I compare thee to a summer’s day?
+By William Shakespeare
+
+.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/1_local/data/sonnet-18-quatrains.txt
+
+.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/1_local/data/sonnet-18-rhyming-couplet.txt
 ```
 
 Parsing of a file that contains a `.yoink` command that points to a URL is exactly the same as parsing a file with `.yoink`
 commands that point to local files.
 
 ```go
-.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/2_remote/main.go
+package main
+
+import (
+	"context"
+	"fmt"
+	"github.com/tedla-brandsema/yoink"
+	"os"
+)
+
+func main() {
+	// Open the root file
+	name := "./data/sonnet-18-remote.txt"
+	file, err := os.Open(name)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	// Resolve .yoink commands in the root file
+	txt, err := yoink.Parse(context.Background(), file, name)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(txt)
+}
 ```
 
 **Q: _Can you add local and remote `.yoink` commands to the same file?_**  
@@ -103,7 +161,13 @@ Consider the following _base_ file. You can find the full example
 [here](https://github.com/tedla-brandsema/examples/tree/main/yoink/3_address).
 
 ```
-.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/3_address/data/sonnet-18-jumbled.txt
+Sonnet 18: Shall I compare thee to a summer’s day?
+By William Shakespeare
+
+.yoink sonnet-18-quatrains.txt /START stanza-2/,/END stanza-2/
+.yoink sonnet-18-rhyming-couplet.txt
+.yoink sonnet-18-quatrains.txt /START stanza-3/,/END stanza-3/
+.yoink sonnet-18-quatrains.txt /START stanza-1/,/END stanza-1/
 ```
 
 Here you can see that all `.yoink` commands that point to `sonnet-18-quatrains.txt` have a second argument; an address.
@@ -120,12 +184,51 @@ but note that you can use more involved regular expression pattern matching synt
 
 The addresses in our _base_ file correspond to demarcations in our target file: sonnet-18-quatrains.txt. See below:
 ```
-.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/3_address/data/sonnet-18-quatrains.txt
+#START stanza-1
+Shall I compare thee to a summer’s day?
+Thou art more lovely and more temperate:
+Rough winds do shake the darling buds of May,
+And summer’s lease hath all too short a date;
+#END stanza-1
+#START stanza-2
+Sometime too hot the eye of heaven shines,
+And often is his gold complexion dimm'd;
+And every fair from fair sometime declines,
+By chance or nature’s changing course untrimm'd;
+#END stanza-2
+#START stanza-3
+But thy eternal summer shall not fade,
+Nor lose possession of that fair thou ow’st;
+Nor shall death brag thou wander’st in his shade,
+When in eternal lines to time thou grow’st:
+#END stanza-3
 ```
 
 Running our jumbled _base_ file with _Yoink_, yields the following result.
 ```
-.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/3_address/data/result.txt
+Sonnet 18: Shall I compare thee to a summer’s day?
+By William Shakespeare
+
+#START stanza-2
+Sometime too hot the eye of heaven shines,
+And often is his gold complexion dimm'd;
+And every fair from fair sometime declines,
+By chance or nature’s changing course untrimm'd;
+#END stanza-2
+So long as men can breathe or eyes can see,
+So long lives this, and this gives life to thee.
+#START stanza-3
+But thy eternal summer shall not fade,
+Nor lose possession of that fair thou ow’st;
+Nor shall death brag thou wander’st in his shade,
+When in eternal lines to time thou grow’st:
+#END stanza-3
+#START stanza-1
+Shall I compare thee to a summer’s day?
+Thou art more lovely and more temperate:
+Rough winds do shake the darling buds of May,
+And summer’s lease hath all too short a date;
+#END stanza-1
 ```
 
 So we succeeded in jumbling the output using addresses, but the address demarcations ended up in the resulting output. 
@@ -208,22 +311,85 @@ Let's start out by creating a stateless parser by implementing the `yoink.ParseF
 
 
 ```go
-.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/4_stateless/main.go /START ParseFunc OMIT/,/END ParseFunc OMIT/
+func HelloParser(sourceFile string, sourceLine int, cmd string) (string, error) {
+	// Default subject of the greeting
+	subject := fmt.Sprintf("from %s", sourceFile)
+
+	// Split the command into its parts where the first part is always the command associated with this parser.
+	// In this case .hello
+	parts := strings.Fields(cmd)
+	if len(parts) > 1 {
+		// Substitute the default subject with the arguments provided
+		subject = strings.Join(parts[1:], " ")
+	}
+
+	// Return the greeting. Starting with the line number, followed by the greeting to our subject.
+	return fmt.Sprintf("%d. Hello, %s!", sourceLine, subject), nil
+}
 ```
 
 We also need to register our `HelloParser` with _Yoink_:
 ```go
-.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/4_stateless/main.go /START RegisterParserFunc OMIT/,/END RegisterParserFunc OMIT/
+	yoink.RegisterParserFunc("hello", HelloParser)
 ```
 
 After that we can parse files containing `.hello` commands like the one below:
 ```
-.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/4_stateless/data/hello.txt
+1. Line one.
+.hello
+3. Line three.
+.hello Tedla Brandsema
 ```
 
 The full stateless example looks like this:
 ```go
-.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/4_stateless/main.go 
+package main
+
+import (
+	"context"
+	"fmt"
+	"github.com/tedla-brandsema/yoink"
+	"os"
+	"strings"
+)
+
+func HelloParser(sourceFile string, sourceLine int, cmd string) (string, error) {
+	// Default subject of the greeting
+	subject := fmt.Sprintf("from %s", sourceFile)
+
+	// Split the command into its parts where the first part is always the command associated with this parser.
+	// In this case .hello
+	parts := strings.Fields(cmd)
+	if len(parts) > 1 {
+		// Substitute the default subject with the arguments provided
+		subject = strings.Join(parts[1:], " ")
+	}
+
+	// Return the greeting. Starting with the line number, followed by the greeting to our subject.
+	return fmt.Sprintf("%d. Hello, %s!", sourceLine, subject), nil
+}
+
+
+func main() {
+	// Register the HelloParser, which is a ParseFunc
+	yoink.RegisterParserFunc("hello", HelloParser)
+
+	// Open the root file
+	name := "./data/hello.txt"
+	file, err := os.Open(name)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	// Resolve .hello commands in the root file
+	txt, err := yoink.Parse(context.Background(), file, name)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(txt)
+
+}
 ```
 
 ## Stateful
@@ -236,19 +402,81 @@ Let's create a parser that counts how many times it has been invoked. You can fi
 First, we need to create our parser:
 
 ```go
-.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/5_stateful/main.go /START Parser OMIT/,/END Parser OMIT/
+type CountParser struct {
+	mut   sync.Mutex
+	count int
+}
+
+func (p *CountParser) Parse(fileName string, lineNumber int, inputLine string) (string, error) {
+	// Since we share state over multiple goroutines, we need to guard against possible race conditions
+	p.mut.Lock()
+	defer p.mut.Unlock()
+
+	// Increment the counter
+	p.count++
+
+	// Return the invocation count
+	return fmt.Sprintf("Command %q has been invoked %d times", strings.Fields(inputLine)[0], p.count), nil
+}
 ```
 
 
 After that, we need to register an instance of our parser:
 ```go
-.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/5_stateful/main.go /START RegisterParser OMIT/,/END RegisterParser OMIT/
+	yoink.RegisterParser("count", &CountParser{})
 ```
 
 
 After that we can parse a file containing `.count` commands, with the full example below:
 ```go
-.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/5_stateful/main.go
+package main
+
+import (
+	"context"
+	"fmt"
+	"github.com/tedla-brandsema/yoink"
+	"os"
+	"strings"
+	"sync"
+)
+
+type CountParser struct {
+	mut   sync.Mutex
+	count int
+}
+
+func (p *CountParser) Parse(fileName string, lineNumber int, inputLine string) (string, error) {
+	// Since we share state over multiple goroutines, we need to guard against possible race conditions
+	p.mut.Lock()
+	defer p.mut.Unlock()
+
+	// Increment the counter
+	p.count++
+
+	// Return the invocation count
+	return fmt.Sprintf("Command %q has been invoked %d times", strings.Fields(inputLine)[0], p.count), nil
+}
+
+
+func main() {
+	// Register an instance of CountParser
+	yoink.RegisterParser("count", &CountParser{})
+
+	// Open the root file
+	name := "./data/count.txt"
+	file, err := os.Open(name)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	// Resolve .count commands in the root file
+	txt, err := yoink.Parse(context.Background(), file, name)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(txt)
+}
 ```
 A possible result from running this example is shown below. It should immediately become clear that sharing state might 
 not yield the desired results. Here we see that evidence that the order in which the goroutines are started does not 
