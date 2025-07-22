@@ -3,8 +3,8 @@ built to include files (or parts thereof) into another file, concurrently. Those
 
 You can extend _Yoink_ by [creating your own command](#creating-your-own-command). 
 
-_Yoink_ is  available as a library or as a commandline tool. See [TODO: heading] for instructions on how to use _Yoink_ on the 
-commandline.
+_Yoink_ is  available as a library or as a commandline tool. Below you can find instructions on how to build and use 
+[Yoink On The Commandline](#yoink-on-the-commandline).
 
 NOTE:
 _Yoink_ is a line-based, flat-include library. It is not suited for including data in hierarchical/nested structures.
@@ -516,4 +516,67 @@ Since _Yoink_ parses commands concurrently, you need to take the following consi
   hit the file descriptor limit (`ulimit -n`). This is unlikely to happen unless scaled up to thousands of goroutines.
 * Hammering the I/O subsystem is a possibility when reading repeatedly from disk, but unlikely to happen.
 * Using `bufio.Reader` or similar on top of `*os.File` in multiple goroutines is **NOT** safe, if they share the same `*os.File`.
-* If you do decide to modify data on disk from inside your parser, race conditions might occur. You need to manage that yourself.
+* If you do decide to modify data on disk from inside your parser, race conditions might occur. You need to manage this yourself.
+
+# Yoink On The Commandline
+
+## Build From Scratch
+
+Prerequisites:
+1. GO 1.24+
+2. git 2+
+
+Clone the repository:
+```
+git clone https://github.com/tedla-brandsema/yoink.git
+```
+
+Change to the newly cloned `yoink` directory:
+```
+cd yoink
+```
+
+Next, build the Yoink commandline tool:
+```
+go build -o ./yoink ./cmd/yoink/
+```
+
+You should now see a `yoink` executable in your directory:
+```
+ls -alh | grep -w yoink
+-rwxr-xr-x. 1 ted ted 8.4M Jul 22 17:45 yoink
+```
+
+Test that the executable works by typing:
+```
+ ./yoink -h
+```
+
+You should see an output similar to the following:
+```
+Usage:
+  yoink [options] <inputFile>
+
+  yoink <inputFile>                  Reads from file, writes to stdout
+  yoink -o <outputFile>              Reads from stdin, writes to file
+  yoink -o <outputFile> <inputFile>  Reads from file, writes to file
+  cat file | yoink                   Pipe input, writes to stdout
+  cat file | yoink -o <outputFile>   Pipe input, writes to file
+  yoink < file                       Redirect input, writes to stdout
+  yoink -o <outputFile> < file       Redirect input, writes to file
+
+Options:
+  -o string
+        Output file (defaults to stdout when omitted)
+```
+
+
+To be able to use `yoink` from any location, make sure to add the `yoink` executable to the `PATH` environment variable:
+```
+export PATH="/path/to/yoink/executable/file:$PATH"
+```
+
+Where `/path/to/app/executable/file/directory` should be replaced with the final destination of the `yoink` executable.
+
+You can also opt to move the `yoink` executable to a location that is already added to the `PATH` environment variable, 
+like `$HOME/bin` or `$HOME/.local/bin`.
