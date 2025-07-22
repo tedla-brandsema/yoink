@@ -178,12 +178,12 @@ func parseLines(ctx context.Context, name string, lines *Lines) error {
 		if strings.HasPrefix(text, ".") { // Handle command
 			args := strings.Fields(text)
 
-			parse := parsers[args[0]]
-			if parse == nil {
+			parser := parsers[args[0]]
+			if parser == nil {
 				log.Printf("%s:%d: unknown command %q", name, lines.line, text)
 				continue
 			}
-			concurrentParse(pc, parse, name, lines, lines.line, text)
+			concurrentParse(pc, parser, name, lines, lines.line, text)
 
 		}
 	}
