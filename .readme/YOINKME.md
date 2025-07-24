@@ -136,8 +136,8 @@ Running our jumbled _base_ file with _Yoink_, yields the following result.
 .yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/3_address/data/result.txt
 ```
 
-We succeeded in jumbling the output using addresses, but we now have the undesirable result that the address 
-demarcations also ended up in the output. 
+We succeeded in jumbling the output using addresses, but we now have the undesirable effect that the address 
+demarcations ended up in the resulting output. 
 
 Luckily we have a way to circumvent this; any line in the program that ends with the four characters `OMIT` is deleted 
 from the source before inclusion.
