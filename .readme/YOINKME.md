@@ -43,13 +43,12 @@ Then, import _Yoink_ in your application:
 import "github.com/tedla-brandsema/yoink"
 ```
 
-# Working With Local Files
+# Working With Local Files ([example](https://github.com/tedla-brandsema/examples/tree/main/yoink/1_local))
 
 You can include local files by adding the `.yoink` command at the start of a line, followed by the name of
 the file to include.
 
-Below is an example file that contains two such commands. You can find the full example 
-[here](https://github.com/tedla-brandsema/examples/tree/main/yoink/1_local).
+Below is an example file that contains two such commands.
 
 ```
 .yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/1_local/data/sonnet-18.txt
@@ -69,13 +68,12 @@ Running the program yields the following result:
 .yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/1_local/data/result.txt
 ```
 
-# Working With Remote Files
+# Working With Remote Files ([example](https://github.com/tedla-brandsema/examples/tree/main/yoink/2_remote))
 
 Including remote files works much the same as working with local files; you add the `.yoink` command to the start of a line,
 but instead of adding the name of the file to include, you add the URL of the file to include.
 
-In the example below, there are two `.yoink` commands pointing to URLs with raw text data. You can find the full example
-[here](https://github.com/tedla-brandsema/examples/tree/main/yoink/2_remote).
+In the example below, there are two `.yoink` commands pointing to URLs with raw text data.
 
 ```
 .yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/2_remote/data/sonnet-18-remote.txt
@@ -95,7 +93,7 @@ Running the program yields the exact same result that we saw in the previous exa
 goes for commands you might implement yourself. All commands that are registered with _Yoink_ can be called from within 
 the file that is parsed._
 
-# The Address Argument
+# The Address Argument ([example](https://github.com/tedla-brandsema/examples/tree/main/yoink/3_address))
 
 Yoinks most useful and powerful feature is the ability to target a specific region by adding an address at the end 
 of a `.yoink` command.
@@ -108,9 +106,7 @@ In our previous examples, we only included entire files into our _base_ file. Wi
 however, we can target a specific region or excerpt from a file.
 
 
-Consider the following _base_ file. You can find the full example
-[here](https://github.com/tedla-brandsema/examples/tree/main/yoink/3_address).
-
+Consider the following _base_ file:
 ```
 .yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/3_address/data/sonnet-18-jumbled.txt
 ```
@@ -187,11 +183,9 @@ There are two ways of creating your own parser:
 The former is stateless and therefore the preferred method for creating your own command. The latter provides a manner 
 to introduce state.
 
-## Stateless
+## Stateless ([example](https://github.com/tedla-brandsema/examples/tree/main/yoink/4_stateless))
 
-Let's start out by creating a stateless parser by implementing the `yoink.ParseFunc`. You can find the full example 
-[here](https://github.com/tedla-brandsema/examples/tree/main/yoink/4_stateless).
-
+Let's start out by creating a stateless parser by implementing the `yoink.ParseFunc`:
 ```go
 .yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/4_stateless/main.go /START ParseFunc OMIT/,/END ParseFunc OMIT/
 ```
@@ -216,15 +210,13 @@ Running the program yields the following result:
 .yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/4_stateless/data/result.txt
 ```
 
-## Stateful
+## Stateful ([example](https://github.com/tedla-brandsema/examples/tree/main/yoink/5_stateful))
 
 If you need shared state between invocations of your parser, you need to implement `yoink.Parser`.
 
-Let's create a parser that counts how many times it has been invoked. You can find the full example 
-[here](https://github.com/tedla-brandsema/examples/tree/main/yoink/5_stateful)
+Let's create a parser that counts how many times it has been invoked. 
 
 First, we need to create our parser:
-
 ```go
 .yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/5_stateful/main.go /START Parser OMIT/,/END Parser OMIT/
 ```
@@ -236,14 +228,13 @@ After that, we need to register an instance of our parser:
 ```
 
 
-After that we can parse a file containing `.count` commands, with the full example below:
+Then we can parse a file containing `.count` commands, with the full example below:
 ```go
 .yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/5_stateful/main.go
 ```
 A possible result from running this example is shown below. It should immediately become clear that sharing state might 
 not yield the desired results. Here we see that evidence that the order in which the goroutines are started does not 
 guarantee the order in which they are returned.
-
 ```
 .yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/5_stateful/data/result.txt
 ```
