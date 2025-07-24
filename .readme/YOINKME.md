@@ -6,10 +6,11 @@ built to include files (or parts thereof) into another file, concurrently. Those
 You can extend _Yoink_ by [creating your own command](#creating-your-own-command). 
 
 _Yoink_ is  available as a library or as a commandline tool. Below you can find instructions on how to build and use 
-[Yoink On The Commandline](#yoink-on-the-commandline).
+[yoink on the commandline](#yoink-on-the-commandline).
 
 NOTE:
-_Yoink_ is a line-based, flat-include library. It is not suited for including data in hierarchical/nested structures.
+_Yoink_ is a line-based, flat-include library. It has no contextual awareness of any hierarchical/nested structures. You
+can use _Yoink_ in such structures (e.g. HTML, JSON, etc.), but be aware that you can end up with non-parsable output.
 
 ![Tests](https://github.com/tedla-brandsema/yoink/actions/workflows/test.yml/badge.svg)
 [![Go Report Card](https://goreportcard.com/badge/github.com/tedla-brandsema/yoink)](https://goreportcard.com/report/github.com/tedla-brandsema/yoink)
