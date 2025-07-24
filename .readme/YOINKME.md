@@ -1,3 +1,5 @@
+# Yoink
+
 _Yoink_ is a stripped-down version of the [GO present tool](https://pkg.go.dev/golang.org/x/tools/present). _Yoink_ is 
 built to include files (or parts thereof) into another file, concurrently. Those files can be included locally or over http(s).
 
@@ -61,6 +63,10 @@ To let _Yoink_ resolve this, we first need to open our root file and then pass i
 .yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/1_local/main.go
 ```
 
+Running the program yields the following result:
+```
+.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/1_local/data/result.txt
+```
 
 # Working With Remote Files
 
@@ -81,10 +87,12 @@ commands that point to local files.
 .yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/2_remote/main.go
 ```
 
+Running the program yields the exact same result that we saw in the previous example.
+
 **Q: _Can you add local and remote `.yoink` commands to the same file?_**  
 **A:** _Absolutely you can. In fact, this is a crucial concept to grasp; every command is parsed individually. This also 
-goes for commands you might implement yourself using `yoink.ParserFunc` and then register using `yoink.Register`. 
-All commands that are registered with _Yoink_ can be called from within the file that is parsed._
+goes for commands you might implement yourself. All commands that are registered with _Yoink_ can be called from within 
+the file that is parsed._
 
 # The Address Argument
 
@@ -128,7 +136,8 @@ Running our jumbled _base_ file with _Yoink_, yields the following result.
 .yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/3_address/data/result.txt
 ```
 
-So we succeeded in jumbling the output using addresses, but the address demarcations ended up in the resulting output. 
+We succeeded in jumbling the output using addresses, but we now have the undesirable result that the address 
+demarcations also ended up in the output. 
 
 Luckily we have a way to circumvent this; any line in the program that ends with the four characters `OMIT` is deleted 
 from the source before inclusion.
@@ -138,11 +147,16 @@ So if we were to change our _base_ file to:
 Sonnet 18: Shall I compare thee to a summer’s day?
 By William Shakespeare
 
- .yoink sonnet-18-quatrains.txt /START stanza-2 OMIT/,/END stanza-2 OMIT/
+ .yoink sonnet-18-quatrains-OMIT.txt /START stanza-2 OMIT/,/END stanza-2 OMIT/
+
  .yoink sonnet-18-rhyming-couplet.txt
- .yoink sonnet-18-quatrains.txt /START stanza-3 OMIT/,/END stanza-3 OMIT/
- .yoink sonnet-18-quatrains.txt /START stanza-1 OMIT/,/END stanza-1 OMIT/
+
+ .yoink sonnet-18-quatrains-OMIT.txt /START stanza-3 OMIT/,/END stanza-3 OMIT/
+
+ .yoink sonnet-18-quatrains-OMIT.txt /START stanza-1 OMIT/,/END stanza-1 OMIT/
 ```
+NOTE: the above `.yoink` statements are preceded by a space, which is done on purpose as to not trigger the Yoink parser.
+In the actual source file — which you can find in the example —, the leading spaces are omitted.
 
 And our `sonnet-18-quatrains.txt` file to:
 ```
@@ -152,12 +166,14 @@ Thou art more lovely and more temperate:
 Rough winds do shake the darling buds of May,
 And summer’s lease hath all too short a date;
 #END stanza-1 OMIT
+
 #START stanza-2 OMIT
 Sometime too hot the eye of heaven shines,
 And often is his gold complexion dimm'd;
 And every fair from fair sometime declines,
 By chance or nature’s changing course untrimm'd;
 #END stanza-2 OMIT
+
 #START stanza-3 OMIT
 But thy eternal summer shall not fade,
 Nor lose possession of that fair thou ow’st;
@@ -175,12 +191,15 @@ Sometime too hot the eye of heaven shines,
 And often is his gold complexion dimm'd;
 And every fair from fair sometime declines,
 By chance or nature’s changing course untrimm'd;
+
 So long as men can breathe or eyes can see,
 So long lives this, and this gives life to thee.
+
 But thy eternal summer shall not fade,
 Nor lose possession of that fair thou ow’st;
 Nor shall death brag thou wander’st in his shade,
 When in eternal lines to time thou grow’st:
+
 Shall I compare thee to a summer’s day?
 Thou art more lovely and more temperate:
 Rough winds do shake the darling buds of May,
@@ -206,7 +225,6 @@ to introduce state.
 Let's start out by creating a stateless parser by implementing the `yoink.ParseFunc`. You can find the full example 
 [here](https://github.com/tedla-brandsema/examples/tree/main/yoink/4_stateless).
 
-
 ```go
 .yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/4_stateless/main.go /START ParseFunc OMIT/,/END ParseFunc OMIT/
 ```
@@ -224,6 +242,11 @@ After that we can parse files containing `.hello` commands like the one below:
 The full stateless example looks like this:
 ```go
 .yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/4_stateless/main.go 
+```
+
+Running the program yields the following result:
+```
+.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/4_stateless/data/result.txt
 ```
 
 ## Stateful
@@ -255,25 +278,7 @@ not yield the desired results. Here we see that evidence that the order in which
 guarantee the order in which they are returned.
 
 ```
-Command ".count" has been invoked 3 times
-Command ".count" has been invoked 4 times
-Command ".count" has been invoked 1 times
-Command ".count" has been invoked 7 times
-Command ".count" has been invoked 5 times
-Command ".count" has been invoked 12 times
-Command ".count" has been invoked 2 times
-Command ".count" has been invoked 6 times
-Command ".count" has been invoked 8 times
-Command ".count" has been invoked 9 times
-Command ".count" has been invoked 10 times
-Command ".count" has been invoked 11 times
-Command ".count" has been invoked 13 times
-Command ".count" has been invoked 14 times
-Command ".count" has been invoked 17 times
-Command ".count" has been invoked 19 times
-Command ".count" has been invoked 15 times
-Command ".count" has been invoked 16 times
-Command ".count" has been invoked 18 times
+.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/5_stateful/data/result.txt
 ```
 
 So be cautious when choosing a stateful over a stateless parser. 

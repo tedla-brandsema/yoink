@@ -1,3 +1,5 @@
+# Yoink
+
 _Yoink_ is a stripped-down version of the [GO present tool](https://pkg.go.dev/golang.org/x/tools/present). _Yoink_ is 
 built to include files (or parts thereof) into another file, concurrently. Those files can be included locally or over http(s).
 
@@ -90,6 +92,29 @@ func main() {
 }
 ```
 
+Running the program yields the following result:
+```
+Sonnet 18: Shall I compare thee to a summer’s day?
+By William Shakespeare
+
+Shall I compare thee to a summer’s day?
+Thou art more lovely and more temperate:
+Rough winds do shake the darling buds of May,
+And summer’s lease hath all too short a date;
+
+Sometime too hot the eye of heaven shines,
+And often is his gold complexion dimm'd;
+And every fair from fair sometime declines,
+By chance or nature’s changing course untrimm'd;
+
+But thy eternal summer shall not fade,
+Nor lose possession of that fair thou ow’st;
+Nor shall death brag thou wander’st in his shade,
+When in eternal lines to time thou grow’st:
+
+So long as men can breathe or eyes can see,
+So long lives this, and this gives life to thee.
+```
 
 # Working With Remote Files
 
@@ -139,10 +164,12 @@ func main() {
 }
 ```
 
+Running the program yields the exact same result that we saw in the previous example.
+
 **Q: _Can you add local and remote `.yoink` commands to the same file?_**  
 **A:** _Absolutely you can. In fact, this is a crucial concept to grasp; every command is parsed individually. This also 
-goes for commands you might implement yourself using `yoink.ParserFunc` and then register using `yoink.Register`. 
-All commands that are registered with _Yoink_ can be called from within the file that is parsed._
+goes for commands you might implement yourself. All commands that are registered with _Yoink_ can be called from within 
+the file that is parsed._
 
 # The Address Argument
 
@@ -165,8 +192,11 @@ Sonnet 18: Shall I compare thee to a summer’s day?
 By William Shakespeare
 
 .yoink sonnet-18-quatrains.txt /START stanza-2/,/END stanza-2/
+
 .yoink sonnet-18-rhyming-couplet.txt
+
 .yoink sonnet-18-quatrains.txt /START stanza-3/,/END stanza-3/
+
 .yoink sonnet-18-quatrains.txt /START stanza-1/,/END stanza-1/
 ```
 
@@ -190,12 +220,14 @@ Thou art more lovely and more temperate:
 Rough winds do shake the darling buds of May,
 And summer’s lease hath all too short a date;
 #END stanza-1
+
 #START stanza-2
 Sometime too hot the eye of heaven shines,
 And often is his gold complexion dimm'd;
 And every fair from fair sometime declines,
 By chance or nature’s changing course untrimm'd;
 #END stanza-2
+
 #START stanza-3
 But thy eternal summer shall not fade,
 Nor lose possession of that fair thou ow’st;
@@ -215,14 +247,17 @@ And often is his gold complexion dimm'd;
 And every fair from fair sometime declines,
 By chance or nature’s changing course untrimm'd;
 #END stanza-2
+
 So long as men can breathe or eyes can see,
 So long lives this, and this gives life to thee.
+
 #START stanza-3
 But thy eternal summer shall not fade,
 Nor lose possession of that fair thou ow’st;
 Nor shall death brag thou wander’st in his shade,
 When in eternal lines to time thou grow’st:
 #END stanza-3
+
 #START stanza-1
 Shall I compare thee to a summer’s day?
 Thou art more lovely and more temperate:
@@ -231,7 +266,8 @@ And summer’s lease hath all too short a date;
 #END stanza-1
 ```
 
-So we succeeded in jumbling the output using addresses, but the address demarcations ended up in the resulting output. 
+We succeeded in jumbling the output using addresses, but we now have the undesirable result that the address 
+demarcations also ended up in the output. 
 
 Luckily we have a way to circumvent this; any line in the program that ends with the four characters `OMIT` is deleted 
 from the source before inclusion.
@@ -241,11 +277,16 @@ So if we were to change our _base_ file to:
 Sonnet 18: Shall I compare thee to a summer’s day?
 By William Shakespeare
 
- .yoink sonnet-18-quatrains.txt /START stanza-2 OMIT/,/END stanza-2 OMIT/
+ .yoink sonnet-18-quatrains-OMIT.txt /START stanza-2 OMIT/,/END stanza-2 OMIT/
+
  .yoink sonnet-18-rhyming-couplet.txt
- .yoink sonnet-18-quatrains.txt /START stanza-3 OMIT/,/END stanza-3 OMIT/
- .yoink sonnet-18-quatrains.txt /START stanza-1 OMIT/,/END stanza-1 OMIT/
+
+ .yoink sonnet-18-quatrains-OMIT.txt /START stanza-3 OMIT/,/END stanza-3 OMIT/
+
+ .yoink sonnet-18-quatrains-OMIT.txt /START stanza-1 OMIT/,/END stanza-1 OMIT/
 ```
+NOTE: the above `.yoink` statements are preceded by a space, which is done on purpose as to not trigger the Yoink parser.
+In the actual source file — which you can find in the example —, the leading spaces are omitted.
 
 And our `sonnet-18-quatrains.txt` file to:
 ```
@@ -255,12 +296,14 @@ Thou art more lovely and more temperate:
 Rough winds do shake the darling buds of May,
 And summer’s lease hath all too short a date;
 #END stanza-1 OMIT
+
 #START stanza-2 OMIT
 Sometime too hot the eye of heaven shines,
 And often is his gold complexion dimm'd;
 And every fair from fair sometime declines,
 By chance or nature’s changing course untrimm'd;
 #END stanza-2 OMIT
+
 #START stanza-3 OMIT
 But thy eternal summer shall not fade,
 Nor lose possession of that fair thou ow’st;
@@ -278,12 +321,15 @@ Sometime too hot the eye of heaven shines,
 And often is his gold complexion dimm'd;
 And every fair from fair sometime declines,
 By chance or nature’s changing course untrimm'd;
+
 So long as men can breathe or eyes can see,
 So long lives this, and this gives life to thee.
+
 But thy eternal summer shall not fade,
 Nor lose possession of that fair thou ow’st;
 Nor shall death brag thou wander’st in his shade,
 When in eternal lines to time thou grow’st:
+
 Shall I compare thee to a summer’s day?
 Thou art more lovely and more temperate:
 Rough winds do shake the darling buds of May,
@@ -308,7 +354,6 @@ to introduce state.
 
 Let's start out by creating a stateless parser by implementing the `yoink.ParseFunc`. You can find the full example 
 [here](https://github.com/tedla-brandsema/examples/tree/main/yoink/4_stateless).
-
 
 ```go
 func HelloParser(sourceFile string, sourceLine int, cmd string) (string, error) {
@@ -390,6 +435,14 @@ func main() {
 	fmt.Println(txt)
 
 }
+```
+
+Running the program yields the following result:
+```
+1. Line one.
+2. Hello, from ./data/hello.txt!
+3. Line three.
+4. Hello, Tedla Brandsema!
 ```
 
 ## Stateful
