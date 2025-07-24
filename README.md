@@ -277,25 +277,19 @@ So if we were to change our _base_ file to:
 Sonnet 18: Shall I compare thee to a summer’s day?
 By William Shakespeare
 
- .yoink sonnet-18-quatrains-OMIT.txt /START stanza-2 OMIT/,/END stanza-2 OMIT/
+.yoink sonnet-18-quatrains-OMIT.txt /START stanza-2 OMIT/,/END stanza-2 OMIT/
 
- .yoink sonnet-18-rhyming-couplet.txt
+.yoink sonnet-18-rhyming-couplet.txt
 
- .yoink sonnet-18-quatrains-OMIT.txt /START stanza-3 OMIT/,/END stanza-3 OMIT/
+.yoink sonnet-18-quatrains-OMIT.txt /START stanza-3 OMIT/,/END stanza-3 OMIT/
 
- .yoink sonnet-18-quatrains-OMIT.txt /START stanza-1 OMIT/,/END stanza-1 OMIT/
+.yoink sonnet-18-quatrains-OMIT.txt /START stanza-1 OMIT/,/END stanza-1 OMIT/
 ```
-NOTE: the above `.yoink` statements are preceded by a space, which is done on purpose as to not trigger the Yoink parser.
-In the actual source file — which you can find in the example —, the leading spaces are omitted.
 
 And our `sonnet-18-quatrains.txt` file to:
 ```
 #START stanza-1 OMIT
 Shall I compare thee to a summer’s day?
-Thou art more lovely and more temperate:
-Rough winds do shake the darling buds of May,
-And summer’s lease hath all too short a date;
-#END stanza-1 OMIT
 
 #START stanza-2 OMIT
 Sometime too hot the eye of heaven shines,

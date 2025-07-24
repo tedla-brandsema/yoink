@@ -144,28 +144,13 @@ from the source before inclusion.
 
 So if we were to change our _base_ file to:
 ```
-Sonnet 18: Shall I compare thee to a summer’s day?
-By William Shakespeare
-
- .yoink sonnet-18-quatrains-OMIT.txt /START stanza-2 OMIT/,/END stanza-2 OMIT/
-
- .yoink sonnet-18-rhyming-couplet.txt
-
- .yoink sonnet-18-quatrains-OMIT.txt /START stanza-3 OMIT/,/END stanza-3 OMIT/
-
- .yoink sonnet-18-quatrains-OMIT.txt /START stanza-1 OMIT/,/END stanza-1 OMIT/
+.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/3_address/data/sonnet-18-jumbled-OMIT.txt
 ```
-NOTE: the above `.yoink` statements are preceded by a space, which is done on purpose as to not trigger the Yoink parser.
-In the actual source file — which you can find in the example —, the leading spaces are omitted.
 
 And our `sonnet-18-quatrains.txt` file to:
 ```
 #START stanza-1 OMIT
 Shall I compare thee to a summer’s day?
-Thou art more lovely and more temperate:
-Rough winds do shake the darling buds of May,
-And summer’s lease hath all too short a date;
-#END stanza-1 OMIT
 
 #START stanza-2 OMIT
 Sometime too hot the eye of heaven shines,
@@ -184,26 +169,7 @@ When in eternal lines to time thou grow’st:
 
 The result would be as follows:
 ```
-Sonnet 18: Shall I compare thee to a summer’s day?
-By William Shakespeare
-
-Sometime too hot the eye of heaven shines,
-And often is his gold complexion dimm'd;
-And every fair from fair sometime declines,
-By chance or nature’s changing course untrimm'd;
-
-So long as men can breathe or eyes can see,
-So long lives this, and this gives life to thee.
-
-But thy eternal summer shall not fade,
-Nor lose possession of that fair thou ow’st;
-Nor shall death brag thou wander’st in his shade,
-When in eternal lines to time thou grow’st:
-
-Shall I compare thee to a summer’s day?
-Thou art more lovely and more temperate:
-Rough winds do shake the darling buds of May,
-And summer’s lease hath all too short a date;
+.yoink https://raw.githubusercontent.com/tedla-brandsema/examples/refs/heads/main/yoink/3_address/data/result-OMIT.txt
 ```
 
 The result is still jumbled, but no longer contains the address demarcations.
