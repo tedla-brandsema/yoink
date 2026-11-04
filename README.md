@@ -9,8 +9,7 @@ _Yoink_ is  available as a library or as a commandline tool. Below you can find 
 [yoink on the commandline](#yoink-on-the-commandline).
 
 NOTE:
-_Yoink_ is a line-based, flat-include library. It has no contextual awareness of any hierarchical/nested structures. You
-can use _Yoink_ in such structures (e.g. HTML, JSON, etc.), but be aware that you can end up with non-parsable output.
+_Yoink_ is a line-based composition library. Its default is flat inclusion; v0.2.0 also offers bounded or unlimited recursive inclusion through per-call options. It has no contextual awareness of markup or hierarchical formats. You can use it with HTML, JSON, and similar formats, but the resulting output may not be valid in those formats.
 
 ![Tests](https://github.com/tedla-brandsema/yoink/actions/workflows/test.yml/badge.svg)
 [![Go Report Card](https://goreportcard.com/badge/github.com/tedla-brandsema/yoink)](https://goreportcard.com/report/github.com/tedla-brandsema/yoink)
@@ -33,7 +32,7 @@ which led me to adapt its codebase into _Yoink_.
 
 Use Go 1.24.4 or newer to add the versioned library dependency. CI tests the latest stable Go release.
 ```
-go get github.com/tedla-brandsema/yoink@v0.1.0
+go get github.com/tedla-brandsema/yoink@v0.2.0
 ```
 
 Then, import _Yoink_ in your application:
@@ -108,8 +107,9 @@ closes files and HTTP response bodies before their workers finish.
 
 ## Composition and resource boundaries
 
-Includes remain flat: a directive inside included content is emitted literally,
-without another expansion pass. Root lines and included lines use LF output;
+`Parse` and the default CLI invocation remain flat: a directive inside included
+content is emitted literally. `ParseWithOptions` and `-depth` enable recursion
+as described below. Root lines and included lines use LF output;
 spaces within lines are preserved. Included lines ending exactly in `OMIT` are
 removed, and leading/trailing empty included lines are trimmed. `Parse` does not
 append a final newline; the CLI appends one. Root input retains the scanner's
@@ -123,11 +123,198 @@ with a 200 ms delay per request after acquiring a slot. The legacy `Config` valu
 is consumed during package initialization; changing it later does not reconfigure
 the built-in parser.
 
-Use deadlines for network time bounds. There is no default HTTP timeout or response
-size limit. Documents and includes are held in memory. Yoink is not a filesystem
-or network sandbox: paths may traverse directories or follow symlinks, and URLs
-may reach internal services. Applications handling untrusted documents must enforce
-their own path, URL, size, and access policies before using built-in inclusion.
+The compatible flat `Parse` API has no default HTTP timeout or response size
+limit; use a deadline when needed. Recursive composition has shared finite budgets
+and a timeout, described below. Documents and includes are held in memory. Yoink
+is not a filesystem or network sandbox: paths may traverse directories or follow
+symlinks, and URLs may reach internal services. Recursion lets one document reach
+additional files and network endpoints. Applications handling untrusted documents
+must enforce their own path, URL, and access policies; resource budgets do not
+replace those controls.
+
+
+# Recursive Composition
+
+`Parse` retains the v0.1.0 behavior. Use the additive API for per-call depth and
+resource options:
+
+```go
+func ParseWithOptions(ctx context.Context, r io.Reader, name string, opts Options) (string, error)
+
+type Options struct {
+    MaxDepth       int
+    MaxOperations  int
+    MaxInputBytes  int64
+    MaxOutputBytes int64
+    Timeout        time.Duration
+}
+```
+
+Options belong to one call. Concurrent callers can choose different depths and
+limits without changing global configuration. `Options{}` and
+`Options{MaxDepth: 1}` are equivalent to `Parse` when no budget field is set.
+
+## Depth and source locations
+
+| `MaxDepth` | Meaning |
+|---|---|
+| `0` | Default to depth 1 |
+| `1` | Flat: expand directives in the root only |
+| `N >= 2` | Expand up to N inclusion levels |
+| `-1` | Unlimited depth, subject to resource budgets and cycle detection |
+
+Other negative depths are invalid. The root document has depth 0; a directive in
+it includes a document at depth 1, whose directives include documents at depth 2.
+At a finite boundary, remaining directives stay literal. Reaching that boundary
+is successful composition, not an error.
+
+For example:
+
+```text
+documents/
+├── grand-vision.md       # .yoink sections/stage-1.md
+├── sections/
+│   └── stage-1.md        # .yoink ../knowledge/economy.md
+└── knowledge/
+    └── economy.md
+```
+
+Depth 1 includes `stage-1.md` and leaves its directive literal. Depth 2 also
+includes `economy.md`. The second path resolves relative to `sections/stage-1.md`,
+not the root document. Source identities and original line numbers remain attached
+to nested directives, including directives in selected excerpts.
+
+The caller-owned root reader uses the directory of its supplied `name`. Loaded
+recursive local sources use the canonical target file's directory: a file symlink
+resolves its nested includes from the target directory, not the alias directory.
+Directory symlink aliases therefore cannot grow the expansion path indefinitely.
+Diagnostics and custom callbacks retain the source path used to reach the file.
+The legacy flat `Parse` path remains unchanged.
+
+For remote documents, a relative target resolves against the containing document's
+HTTP(S) URL. After a redirect, the final response URL supplies that base. An
+absolute HTTP(S) URL can be included from a local or remote document. Recursive
+remote inclusion supports HTTP and HTTPS, not arbitrary URL schemes.
+
+An address selects and rounds the source range first; OMIT filtering and trimming
+of leading/trailing empty included lines happen before recursive expansion.
+Directives in excluded ranges or removed OMIT lines do not run. Existing sam-style
+address syntax and output ordering remain unchanged.
+
+Registered `Parser`, `ParseFunc`, and `ContextParser` commands work inside expanded
+sources without changes to their interfaces. Their generated output is inserted
+literally, even if it contains `.yoink` text. Only actual built-in `.yoink`
+inclusions establish another source document. Registering a custom replacement for
+`yoink` therefore retains ordinary custom-parser output behavior.
+
+## Repeated sources and cycles
+
+Independent branches may include the same file repeatedly. Unlimited mode detects
+a cycle only when the same expansion identity recurs in its active inclusion
+ancestry. That identity includes the canonical file or URL, effective resolution base,
+selected byte range, actual selected content, and root-versus-include filtering
+mode (OMIT applies only to included content). Local identity canonicalization accounts for path
+aliases and symlinks; remote identities use the final response URL.
+
+This permits terminating range-selected self-inclusion, where the selected region
+contains no further recursive directive. A genuine unlimited cycle returns an
+error describing the inclusion chain; `errors.Is(err, yoink.ErrCycle)` identifies
+it. Finite-depth requests may unfold repeated sources until their requested
+boundary, within the same resource budgets.
+
+The composer uses an explicit work queue and iterative output traversal rather
+than recursive Go calls. Deep finite chains either complete within the budgets or
+return a controlled limit error.
+
+## Shared resource budgets
+
+Recursion enables these finite defaults. Setting any budget field also enables
+budgeted composition for flat depth; zero budget fields then use the defaults.
+Negative budget values are invalid.
+
+| Option | Default | Maximum override |
+|---|---:|---:|
+| `MaxOperations` | 10,000 recognized command invocations | 1,000,000 |
+| `MaxInputBytes` | 32 MiB | 1 GiB |
+| `MaxOutputBytes` | 32 MiB | 1 GiB |
+| `Timeout` | 30 seconds | 24 hours |
+
+All limits are shared across the complete call, including parallel branches.
+Operations count built-in inclusions and registered custom commands. Input bytes
+include the root, entire fetched sources before address selection, and repeated
+reads of the same source. At most one additional byte may be read on an input-limit
+failure to distinguish EOF from excess data. Output bytes count the final expanded
+result, including newline separators and custom-parser output.
+
+An explicit pool of eight composition workers bounds concurrency and fan-out;
+remote requests also retain the shared five-request throttle. Output size is
+checked before final string allocation, without repeatedly copying intermediate
+expanded documents. A custom parser allocates its own result before Yoink can
+check that result's size, so custom code remains responsible for its allocations.
+Input accounting covers the root and built-in source reads; custom parsers must
+bound their own I/O as well as allocations.
+Recognized nested directive lines must be shorter than 64 KiB to bound command
+tokenization; ordinary included lines can be longer. Directives left literal at a
+finite depth boundary are not parsed or subject to this command-line limit.
+
+Budget failures return an empty result and a meaningful error. Use
+`errors.Is(err, yoink.ErrLimitExceeded)` or `errors.As` with `*yoink.LimitError`;
+its `Resource` and `Limit` fields identify the exhausted budget. The earlier of
+the caller's context deadline and `Timeout` governs cooperative work, with
+`context.DeadlineExceeded` remaining detectable through `errors.Is`.
+
+Unlimited depth removes only the requested depth boundary. It does not remove
+operation, byte, or time limits. All workers still finish before return, including
+on a cycle, error, limit, or cancellation. Legacy callbacks and synchronous readers
+or filesystem calls that ignore cancellation can delay completion beyond the
+deadline; Go cannot forcibly stop those operations.
+
+## Go example
+
+This complete program composes a file named by its first argument:
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "os"
+    "time"
+
+    "github.com/tedla-brandsema/yoink"
+)
+
+func main() {
+    if len(os.Args) != 2 {
+        fmt.Fprintln(os.Stderr, "usage: compose input.md")
+        return
+    }
+    name := os.Args[1]
+    input, err := os.Open(name)
+    if err != nil {
+        fmt.Fprintln(os.Stderr, err)
+        return
+    }
+    defer input.Close()
+
+    result, err := yoink.ParseWithOptions(context.Background(), input, name, yoink.Options{
+        MaxDepth:       -1, // or 1 for flat, 2 for two levels
+        MaxOperations:  20_000,
+        MaxInputBytes:  64 << 20,
+        MaxOutputBytes: 64 << 20,
+        Timeout:        45 * time.Second,
+    })
+    if err != nil {
+        fmt.Fprintln(os.Stderr, err)
+        return
+    }
+    fmt.Println(result)
+}
+```
+
+From a checkout, use `testdata/recursive/grand-vision.md` as the input for a small
+source-relative example. The same fixture also works with the CLI below.
 
 # Working With Local Files ([example](https://github.com/tedla-brandsema/examples/tree/main/yoink/1_local))
 
@@ -655,11 +842,30 @@ Since _Yoink_ parses commands concurrently, you need to take the following consi
 Install the versioned CLI directly:
 
 ```sh
-go install github.com/tedla-brandsema/yoink/cmd/yoink@v0.1.0
+go install github.com/tedla-brandsema/yoink/cmd/yoink@v0.2.0
 ```
 
 The CLI returns nonzero on parsing or output errors. It composes the input before
 opening an output file, so parsing failures leave an existing output file intact.
+
+Select inclusion depth with `-depth` before the input filename:
+
+```sh
+yoink document.md             # flat, unchanged default
+yoink -depth 1 document.md     # explicit flat behavior
+yoink -depth 2 document.md     # two inclusion levels
+yoink -depth 5 document.md     # up to five levels
+yoink -depth all document.md   # unlimited depth within shared budgets
+yoink -depth all -o composed.md document.md
+cat document.md | yoink -depth 2 -o composed.md
+yoink -depth all testdata/recursive/grand-vision.md
+```
+
+Depth accepts positive decimal integers or exactly `all`. Zero, signed values,
+other strings, missing values, and integer overflow are errors. The CLI uses the
+library's default resource budgets for recursive requests. For stdin, local paths
+resolve from the current directory; file input resolves them from its source file.
+
 
 ## Build From Scratch
 
@@ -699,6 +905,8 @@ Usage:
   yoink [options] <inputFile>
 
   yoink <inputFile>                  Reads from file, writes to stdout
+  yoink -depth 2 <inputFile>         Expands two inclusion levels
+  yoink -depth all <inputFile>       Expands recursively within resource budgets
   yoink -o <outputFile>              Reads from stdin, writes to file
   yoink -o <outputFile> <inputFile>  Reads from file, writes to file
   cat file | yoink                   Pipe input, writes to stdout
@@ -707,6 +915,8 @@ Usage:
   yoink -o <outputFile> < file       Redirect input, writes to file
 
 Options:
+  -depth string
+        Inclusion depth: a positive integer or all (default flat) (default "1")
   -o string
         Output file (defaults to stdout when omitted)
 ```

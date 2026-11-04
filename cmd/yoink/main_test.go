@@ -133,6 +133,107 @@ func TestCLI(t *testing.T) {
 		})
 	}
 
+	write("depth-a.txt", "level one\n.yoink depth-b.txt\n")
+	write("depth-b.txt", "level two\n.yoink depth-c.txt\n")
+	write("depth-c.txt", "level three\n.yoink depth-d.txt\n")
+	write("depth-d.txt", "level four\n")
+	const recursiveInput = "before\n.yoink depth-a.txt\nafter\n"
+	recursivePath := write("recursive.txt", recursiveInput)
+	for _, tc := range []struct {
+		depth string
+		want  string
+	}{
+		{"", "before\nlevel one\n.yoink depth-b.txt\nafter\n"},
+		{"1", "before\nlevel one\n.yoink depth-b.txt\nafter\n"},
+		{"2", "before\nlevel one\nlevel two\n.yoink depth-c.txt\nafter\n"},
+		{"3", "before\nlevel one\nlevel two\nlevel three\n.yoink depth-d.txt\nafter\n"},
+		{"5", "before\nlevel one\nlevel two\nlevel three\nlevel four\nafter\n"},
+		{"all", "before\nlevel one\nlevel two\nlevel three\nlevel four\nafter\n"},
+	} {
+		name := tc.depth
+		if name == "" {
+			name = "default"
+		}
+		t.Run("depth-"+name, func(t *testing.T) {
+			for _, fileInput := range []bool{true, false} {
+				for _, fileOutput := range []bool{true, false} {
+					var args []string
+					if tc.depth != "" {
+						args = append(args, "-depth", tc.depth)
+					}
+					outputPath := filepath.Join(dir, "recursive-output.txt")
+					if fileOutput {
+						args = append(args, "-o", outputPath)
+					}
+					cwd, stdin := docs, recursiveInput
+					if fileInput {
+						cwd, stdin = dir, ""
+						args = append(args, recursivePath)
+					}
+					stdout, stderr, err := run(t, cwd, stdin, args...)
+					if err != nil || stderr != "" {
+						t.Fatalf("depth=%q file input=%t output=%t: %v, stderr=%q", tc.depth, fileInput, fileOutput, err, stderr)
+					}
+					got := stdout
+					if fileOutput {
+						if stdout != "" {
+							t.Fatalf("file output also wrote stdout: %q", stdout)
+						}
+						data, err := os.ReadFile(outputPath)
+						if err != nil {
+							t.Fatal(err)
+						}
+						got = string(data)
+					}
+					if got != tc.want {
+						t.Fatalf("output=%q; want %q", got, tc.want)
+					}
+				}
+			}
+		})
+	}
+
+	for _, value := range []string{"0", "-1", "-2", "alll", "ALL", "1.5", "+2", "", "999999999999999999999999999999999999"} {
+		t.Run("invalid-depth-"+value, func(t *testing.T) {
+			outputPath := write("invalid-depth-output.txt", "preserve\n")
+			stdout, stderr, err := run(t, docs, "valid\n", "-depth="+value, "-o", outputPath)
+			var exit *exec.ExitError
+			if !errors.As(err, &exit) || exit.ExitCode() != 2 || stdout != "" || !strings.Contains(stderr, "Invalid depth:") {
+				t.Fatalf("invalid depth %q: stdout=%q stderr=%q err=%v", value, stdout, stderr, err)
+			}
+			data, err := os.ReadFile(outputPath)
+			if err != nil || string(data) != "preserve\n" {
+				t.Fatalf("invalid depth modified output: %q %v", data, err)
+			}
+		})
+	}
+	t.Run("missing-depth-value", func(t *testing.T) {
+		stdout, stderr, err := run(t, docs, "valid\n", "-depth")
+		var exit *exec.ExitError
+		if !errors.As(err, &exit) || exit.ExitCode() != 2 || stdout != "" || !strings.Contains(stderr, "flag needs an argument") {
+			t.Fatalf("stdout=%q stderr=%q err=%v", stdout, stderr, err)
+		}
+	})
+	t.Run("recursive-failure-preserves-output", func(t *testing.T) {
+		write("broken-child.txt", ".yoink missing-child.txt\n")
+		path := write("broken-recursive.txt", "before\n.yoink broken-child.txt\nafter\n")
+		outputPath := write("recursive-failure-output.txt", "preserve\n")
+		stdout, stderr, err := run(t, dir, "", "-depth", "all", "-o", outputPath, path)
+		if err == nil || stdout != "" || !strings.Contains(stderr, "broken-child.txt:1:") {
+			t.Fatalf("stdout=%q stderr=%q err=%v", stdout, stderr, err)
+		}
+		data, err := os.ReadFile(outputPath)
+		if err != nil || string(data) != "preserve\n" {
+			t.Fatalf("recursive failure modified output: %q %v", data, err)
+		}
+	})
+	t.Run("help-describes-depth", func(t *testing.T) {
+		stdout, stderr, err := run(t, dir, "", "-h")
+		if err != nil || stdout != "" || !strings.Contains(stderr, "-depth") || !strings.Contains(stderr, "all") {
+			t.Fatalf("stdout=%q stderr=%q err=%v", stdout, stderr, err)
+		}
+	})
+
 	t.Run("input-open-error", func(t *testing.T) {
 		stdout, stderr, err := run(t, dir, "", filepath.Join(dir, "absent.txt"))
 		if err == nil || stdout != "" || !strings.Contains(stderr, "Error opening input file:") {

@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"text/tabwriter"
 
 	"github.com/tedla-brandsema/yoink"
@@ -12,8 +13,14 @@ import (
 
 func main() {
 	outputFile := flag.String("o", "", "Output file (defaults to stdout when omitted)")
+	depthFlag := flag.String("depth", "1", "Inclusion depth: a positive integer or all (default flat)")
 	flag.Usage = usage
 	flag.Parse()
+	depth, err := parseDepth(*depthFlag)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid depth: %v\n", err)
+		os.Exit(2)
+	}
 
 	ctx := context.Background()
 
@@ -43,7 +50,7 @@ func main() {
 		}
 	}
 
-	result, err := yoink.Parse(ctx, input, inputName)
+	result, err := yoink.ParseWithOptions(ctx, input, inputName, yoink.Options{MaxDepth: depth})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Parsing error: %v\n", err)
 		os.Exit(1)
@@ -66,12 +73,30 @@ func main() {
 	}
 }
 
+func parseDepth(value string) (int, error) {
+	if value == "all" {
+		return -1, nil
+	}
+	for _, digit := range value {
+		if digit < '0' || digit > '9' {
+			return 0, fmt.Errorf("expected a positive decimal integer or all, got %q", value)
+		}
+	}
+	depth, err := strconv.Atoi(value)
+	if err != nil || depth < 1 {
+		return 0, fmt.Errorf("expected a positive decimal integer or all, got %q", value)
+	}
+	return depth, nil
+}
+
 func usage() {
 	w := tabwriter.NewWriter(os.Stderr, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "\tyoink [options] <inputFile>")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "\tyoink <inputFile>\tReads from file, writes to stdout")
+	fmt.Fprintln(w, "\tyoink -depth 2 <inputFile>\tExpands two inclusion levels")
+	fmt.Fprintln(w, "\tyoink -depth all <inputFile>\tExpands recursively within resource budgets")
 	fmt.Fprintln(w, "\tyoink -o <outputFile>\tReads from stdin, writes to file")
 	fmt.Fprintln(w, "\tyoink -o <outputFile> <inputFile>\tReads from file, writes to file")
 	fmt.Fprintln(w, "\tcat file | yoink\tPipe input, writes to stdout")
