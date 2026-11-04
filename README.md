@@ -31,10 +31,9 @@ which led me to adapt its codebase into _Yoink_.
 
 # Installing The Library
 
-Use `go get` to install the latest version
-of the library.
+Use Go 1.24.4 or newer to add the versioned library dependency. CI tests the latest stable Go release.
 ```
-go get -u github.com/tedla-brandsema/yoink@latest
+go get github.com/tedla-brandsema/yoink@v0.1.0
 ```
 
 Then, import _Yoink_ in your application:
@@ -42,6 +41,93 @@ Then, import _Yoink_ in your application:
 ```go
 import "github.com/tedla-brandsema/yoink"
 ```
+
+## Library API and errors
+
+```go
+func Parse(ctx context.Context, r io.Reader, name string) (string, error)
+```
+
+Pass a non-nil context and reader. `name` identifies the source in errors and
+provides the directory for relative local includes. Independent calls to `Parse`
+can run concurrently. On failure, `Parse` returns an empty string and an error;
+malformed input and ordinary cancellation do not exit the caller's process.
+Errors retain the source filename and directive line, and wrap underlying errors
+so callers can use `errors.Is` and `errors.As`.
+
+For example, a caller can handle cancellation and continue serving other work:
+
+```go
+result, err := yoink.Parse(ctx, reader, "docs/input.txt")
+if err != nil {
+    if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+        return // the caller decides how to handle cancellation
+    }
+    fmt.Fprintln(os.Stderr, err)
+    return
+}
+fmt.Print(result)
+```
+
+This fragment uses the standard `context`, `errors`, `fmt`, and `os` packages.
+A missing include, unmatched address, malformed address, invalid regular expression,
+or registered parser error rejects the entire composition. Unknown commands keep
+the original line and produce a standard logger warning, as before.
+
+## Cancellation and completion
+
+`Parse` joins every started parser worker before returning, including when a worker
+fails or the context expires. The first reported worker error cancels sibling work.
+HTTP requests, response reads, remote concurrency waits, and the per-request delay
+honor cancellation. A successful return preserves document order even when callbacks
+finish in another order. No successful partial result is returned on failure.
+
+Existing `Parser` and `ParseFunc` callbacks remain supported. They must return
+before `Parse` can return: Go cannot forcibly stop a blocked callback. A parser can
+add cooperative cancellation by also implementing this optional interface:
+
+```go
+type ContextParser interface {
+    ParseContext(ctx context.Context, fileName string, lineNumber int, inputLine string) (string, error)
+}
+```
+
+Register it with `RegisterParser` as usual; it must still implement `Parser`.
+Yoink calls `ParseContext` in preference to `Parse`. Check `ctx.Done()` or propagate
+the context to blocking operations. Callbacks must join any goroutines they create
+and synchronize their own mutable state; registered instances are shared across
+commands and concurrent documents. Registration and lookup are synchronized, and
+each document uses one registry snapshot. Invalid names passed to `RegisterParser`
+remain programmer errors and panic. Panics in third-party callbacks are not recovered.
+
+The input reader is caller-owned and is not closed by Yoink. Input and local-file
+reads run synchronously, checking cancellation between reads. A blocked arbitrary
+reader or filesystem system call must finish before cancellation can return; no
+background reader is left behind. Local includes must be regular files. Yoink
+closes files and HTTP response bodies before their workers finish.
+
+## Composition and resource boundaries
+
+Includes remain flat: a directive inside included content is emitted literally,
+without another expansion pass. Root lines and included lines use LF output;
+spaces within lines are preserved. Included lines ending exactly in `OMIT` are
+removed, and leading/trailing empty included lines are trimmed. `Parse` does not
+append a final newline; the CLI appends one. Root input retains the scanner's
+roughly 64 KiB per-line limit and returns an error on oversized lines. Included
+lines can be longer and are no longer silently truncated.
+
+Local paths are relative to the source document. Remote includes support HTTP(S),
+follow the default HTTP client's redirects, and require a final 2xx response.
+Remote work retains the default limit of five concurrent requests across calls,
+with a 200 ms delay per request after acquiring a slot. The legacy `Config` value
+is consumed during package initialization; changing it later does not reconfigure
+the built-in parser.
+
+Use deadlines for network time bounds. There is no default HTTP timeout or response
+size limit. Documents and includes are held in memory. Yoink is not a filesystem
+or network sandbox: paths may traverse directories or follow symlinks, and URLs
+may reach internal services. Applications handling untrusted documents must enforce
+their own path, URL, size, and access policies before using built-in inclusion.
 
 # Working With Local Files ([example](https://github.com/tedla-brandsema/examples/tree/main/yoink/1_local))
 
@@ -79,14 +165,16 @@ func main() {
 	name := "./data/sonnet-18.txt"
 	file, err := os.Open(name)
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, err)
+		return
 	}
 	defer file.Close()
 
 	// Resolve .yoink commands in the root file
 	txt, err := yoink.Parse(context.Background(), file, name)
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, err)
+		return
 	}
 	fmt.Println(txt)
 }
@@ -150,14 +238,16 @@ func main() {
 	name := "./data/sonnet-18-remote.txt"
 	file, err := os.Open(name)
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, err)
+		return
 	}
 	defer file.Close()
 
 	// Resolve .yoink commands in the root file
 	txt, err := yoink.Parse(context.Background(), file, name)
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, err)
+		return
 	}
 	fmt.Println(txt)
 }
@@ -177,7 +267,7 @@ of a `.yoink` command.
 
 The address syntax is similar in its simplest form to that of ed, but comes from sam and is more general. See 
 [Table II](https://plan9.io/sys/doc/sam/sam.html) of _The Text Editor sam_ manual for full details. 
-The displayed block is always rounded out to a full line at both ends.
+The displayed block is always rounded out to a full line at both ends. Reverse regular-expression searches are not implemented. A final closing regex slash is optional; a trailing escape is an error. Numeric line selection also accepts a final line without a newline.
 
 In our previous examples, we only included entire files into our _base_ file. With the help of the address argument, 
 however, we can target a specific region or excerpt from a file.
@@ -338,8 +428,7 @@ There are two ways of creating your own parser:
 1. Implement `yoink.ParseFunc`.
 2. Implement `yoink.Parser`.
 
-The former is stateless and therefore the preferred method for creating your own command. The latter provides a manner 
-to introduce state.
+A function is convenient for a stateless command. Either approach can share state; functions that close over mutable state need synchronization too.
 
 ## Stateless ([example](https://github.com/tedla-brandsema/examples/tree/main/yoink/4_stateless))
 
@@ -412,14 +501,16 @@ func main() {
 	name := "./data/hello.txt"
 	file, err := os.Open(name)
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, err)
+		return
 	}
 	defer file.Close()
 
 	// Resolve .hello commands in the root file
 	txt, err := yoink.Parse(context.Background(), file, name)
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, err)
+		return
 	}
 	fmt.Println(txt)
 
@@ -506,14 +597,16 @@ func main() {
 	name := "./data/count.txt"
 	file, err := os.Open(name)
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, err)
+		return
 	}
 	defer file.Close()
 
 	// Resolve .count commands in the root file
 	txt, err := yoink.Parse(context.Background(), file, name)
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, err)
+		return
 	}
 	fmt.Println(txt)
 }
@@ -559,10 +652,19 @@ Since _Yoink_ parses commands concurrently, you need to take the following consi
 
 # Yoink On The Commandline
 
+Install the versioned CLI directly:
+
+```sh
+go install github.com/tedla-brandsema/yoink/cmd/yoink@v0.1.0
+```
+
+The CLI returns nonzero on parsing or output errors. It composes the input before
+opening an output file, so parsing failures leave an existing output file intact.
+
 ## Build From Scratch
 
 Prerequisites:
-1. GO 1.24+
+1. Go 1.24.4 or newer
 2. git 2+
 
 Clone the repository:

@@ -14,9 +14,10 @@ import (
 )
 
 type ConcurrentContext struct {
-	Ctx   context.Context
-	WG    *sync.WaitGroup
-	errCh chan error
+	Ctx    context.Context
+	WG     *sync.WaitGroup
+	errCh  chan error
+	cancel context.CancelFunc
 }
 
 func (c *ConcurrentContext) ErrCh() <-chan error {
@@ -26,19 +27,25 @@ func (c *ConcurrentContext) ErrCh() <-chan error {
 func (c *ConcurrentContext) SendErr(err error) {
 	select {
 	case c.errCh <- err:
+		if c.cancel != nil {
+			c.cancel()
+		}
 	default:
 	}
 }
 
 func (c *ConcurrentContext) Wait() error {
+	// Completion includes every callback, even one that ignores cancellation.
+	c.WG.Wait()
 	select {
 	case err := <-c.errCh:
 		return fmt.Errorf("parsing failed: %w", err)
-	case <-c.Ctx.Done():
-		return fmt.Errorf("context cancelled: %w", c.Ctx.Err())
-	case <-wait(c.WG):
-		return nil
+	default:
 	}
+	if err := c.Ctx.Err(); err != nil {
+		return fmt.Errorf("context cancelled: %w", err)
+	}
+	return nil
 }
 
 var (
@@ -48,6 +55,12 @@ var (
 
 type Parser interface {
 	Parse(fileName string, lineNumber int, inputLine string) (string, error)
+}
+
+// ContextParser optionally adds cooperative cancellation to a Parser.
+// Parse waits for both context-aware and legacy callbacks to return.
+type ContextParser interface {
+	ParseContext(ctx context.Context, fileName string, lineNumber int, inputLine string) (string, error)
 }
 
 type ParseFunc func(fileName string, lineNumber int, inputLine string) (string, error)
@@ -69,11 +82,18 @@ func RegisterParserFunc(name string, fn ParseFunc) {
 	RegisterParser(name, fn)
 }
 
-// Parse parses a document from r.
+// Parse composes a flat document from r, resolving registered directives in
+// parallel while preserving source order. On error it returns an empty result
+// and a wrapped error. It joins all started parser callbacks before returning;
+// callbacks and synchronous reads that ignore cancellation can delay completion.
+// The caller owns r and must supply a non-nil context.
 func Parse(ctx context.Context, r io.Reader, name string) (string, error) {
-	lines, err := readLines(r)
+	if err := ctx.Err(); err != nil {
+		return "", fmt.Errorf("%s: %w", name, err)
+	}
+	lines, err := readLines(contextReader{ctx, r})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%s: reading input: %w", name, err)
 	}
 
 	lines.comment = "//"
@@ -83,6 +103,24 @@ func Parse(ctx context.Context, r io.Reader, name string) (string, error) {
 	}
 
 	return strings.Join(lines.text, "\n"), nil
+}
+
+// Reads stay in the caller/worker goroutine: an arbitrary io.Reader cannot be
+// interrupted safely. Cancellation is observed between synchronous reads.
+type contextReader struct {
+	ctx context.Context
+	r   io.Reader
+}
+
+func (r contextReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	n, err := r.r.Read(p)
+	if cancelErr := r.ctx.Err(); cancelErr != nil {
+		return n, cancelErr
+	}
+	return n, err
 }
 
 type Lines struct {
@@ -160,13 +198,23 @@ func (l *Lines) nextNonEmpty() (text string, ok bool) {
 }
 
 func parseLines(ctx context.Context, name string, lines *Lines) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	pc := &ConcurrentContext{
-		Ctx:   ctx,
-		WG:    &sync.WaitGroup{},
-		errCh: make(chan error, 1),
+		Ctx:    ctx,
+		WG:     &sync.WaitGroup{},
+		errCh:  make(chan error, 1),
+		cancel: cancel,
 	}
+	// A document uses one registry snapshot. Callbacks run outside the lock.
+	parsersMu.RLock()
+	registered := make(map[string]Parser, len(parsers))
+	for command, parser := range parsers {
+		registered[command] = parser
+	}
+	parsersMu.RUnlock()
 
-	for i := 1; ; i++ {
+	for ctx.Err() == nil {
 		text, ok := lines.nextNonEmpty()
 		for ok && text == "" { // skip empty lines
 			text, ok = lines.next()
@@ -178,7 +226,7 @@ func parseLines(ctx context.Context, name string, lines *Lines) error {
 		if strings.HasPrefix(text, ".") { // Handle command
 			args := strings.Fields(text)
 
-			parser := parsers[args[0]]
+			parser := registered[args[0]]
 			if parser == nil {
 				log.Printf("%s:%d: unknown command %q", name, lines.line, text)
 				continue
@@ -188,7 +236,7 @@ func parseLines(ctx context.Context, name string, lines *Lines) error {
 		}
 	}
 	if err := pc.Wait(); err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("%s: %w", name, err)
 	}
 	return nil
 }
@@ -199,9 +247,18 @@ func concurrentParse(pc *ConcurrentContext, parser Parser, sourceFile string, li
 	go func() {
 		defer pc.WG.Done()
 
-		t, err := parser.Parse(sourceFile, sourceLine, cmd)
+		if pc.Ctx.Err() != nil {
+			return
+		}
+		var t string
+		var err error
+		if contextual, ok := parser.(ContextParser); ok {
+			t, err = contextual.ParseContext(pc.Ctx, sourceFile, sourceLine, cmd)
+		} else {
+			t, err = parser.Parse(sourceFile, sourceLine, cmd)
+		}
 		if err != nil {
-			pc.SendErr(err)
+			pc.SendErr(fmt.Errorf("%s:%d: %w", sourceFile, sourceLine, err))
 			return
 		}
 
@@ -209,13 +266,4 @@ func concurrentParse(pc *ConcurrentContext, parser Parser, sourceFile string, li
 			pc.SendErr(err)
 		}
 	}()
-}
-
-func wait(wg *sync.WaitGroup) <-chan struct{} {
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-	return done
 }

@@ -14,12 +14,15 @@ import (
 // It's an evaluator for the file address syntax implemented by acme and sam,
 // but using Go-native regular expressions.
 // To keep things reasonably close, this version uses (?m:re) for all user-provided
-// regular expressions. That is the only change to the code from codewalk.go.
+// regular expressions.
 // See http://9p.io/sys/doc/sam/sam.html Table II for details on the syntax.
 
 // addrToByteRange evaluates the given address starting at offset start in data.
 // It returns the lo and hi byte offset of the matched region within data.
 func addrToByteRange(addr string, start int, data []byte) (lo, hi int, err error) {
+	if start < 0 || start > len(data) {
+		return 0, 0, errors.New("address out of range")
+	}
 	if addr == "" {
 		lo, hi = start, len(data)
 		return
@@ -28,6 +31,8 @@ func addrToByteRange(addr string, start int, data []byte) (lo, hi int, err error
 		dir        byte
 		prevc      byte
 		charOffset bool
+		rangeLo    int
+		hasRange   bool
 	)
 	lo = start
 	hi = start
@@ -37,12 +42,18 @@ func addrToByteRange(addr string, start int, data []byte) (lo, hi int, err error
 		default:
 			err = errors.New("invalid address syntax near " + string(c))
 		case ',':
-			if len(addr) == 1 {
-				hi = len(data)
-			} else {
-				_, hi, err = addrToByteRange(addr[1:], hi, data)
+			if !hasRange {
+				rangeLo, hasRange = lo, true
 			}
-			return
+			if len(addr) == 1 {
+				return rangeLo, len(data), nil
+			}
+			// Evaluate the next endpoint at the previous endpoint without
+			// recursive calls for arbitrarily long comma-separated addresses.
+			lo = hi
+			dir, prevc, charOffset = 0, 0, false
+			addr = addr[1:]
+			continue
 
 		case '+', '-':
 			if prevc == '+' || prevc == '-' {
@@ -85,6 +96,9 @@ func addrToByteRange(addr string, start int, data []byte) (lo, hi int, err error
 			for i = 1; i < len(addr); i++ {
 				switch addr[i] {
 				case '\\':
+					if i+1 == len(addr) {
+						return 0, 0, errors.New("invalid address syntax: trailing escape in regular expression")
+					}
 					i++
 				case '/':
 					j = i + 1
@@ -109,6 +123,9 @@ func addrToByteRange(addr string, start int, data []byte) (lo, hi int, err error
 	}
 	if err != nil {
 		return 0, 0, err
+	}
+	if hasRange {
+		lo = rangeLo
 	}
 	return lo, hi, nil
 }
@@ -159,15 +176,17 @@ func addrNumber(data []byte, lo, hi int, dir byte, n int, charOffset bool) (int,
 				return lo, hi + 1, nil
 			}
 		}
+		// A final line need not end with a newline.
+		if n == 1 && hi > lo && data[hi-1] != '\n' {
+			return lo, hi, nil
+		}
 
 	case '-':
 		if charOffset {
-			// Scan backward for bytes that are not UTF-8 continuation bytes.
 			pos := lo
-			for ; pos > 0 && n > 0; pos-- {
-				if data[pos]&0xc0 != 0x80 {
-					n--
-				}
+			for ; pos > 0 && n > 0; n-- {
+				_, size := utf8.DecodeLastRune(data[:pos])
+				pos -= size
 			}
 			if n == 0 {
 				return pos, pos, nil

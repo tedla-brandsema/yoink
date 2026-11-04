@@ -13,6 +13,9 @@ type config struct {
 	MinInterval   time.Duration
 }
 
+// Config holds the legacy startup defaults. The built-in remote parser takes
+// its configuration during package initialization; later changes do not
+// reconfigure it. Parsing does not read Config.
 var Config *config
 
 const (

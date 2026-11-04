@@ -43,6 +43,12 @@ func main() {
 		}
 	}
 
+	result, err := yoink.Parse(ctx, input, inputName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Parsing error: %v\n", err)
+		os.Exit(1)
+	}
+
 	output := os.Stdout
 	if *outputFile != "" {
 		file, err := os.Create(*outputFile)
@@ -54,13 +60,10 @@ func main() {
 		output = file
 	}
 
-	result, err := yoink.Parse(ctx, input, inputName)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Parsing error: %v\n", err)
+	if _, err := fmt.Fprintln(output, result); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
 		os.Exit(1)
 	}
-
-	fmt.Fprintln(output, result)
 }
 
 func usage() {

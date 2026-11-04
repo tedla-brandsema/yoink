@@ -4,8 +4,8 @@
 package yoink
 
 import (
-	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -30,6 +30,15 @@ func (s *Semaphore) Acquire() {
 	s.sem <- struct{}{}
 }
 
+func (s *Semaphore) acquireContext(ctx context.Context) error {
+	select {
+	case s.sem <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func (s *Semaphore) Release() {
 	<-s.sem
 }
@@ -50,18 +59,39 @@ func configure() {
 
 func init() {
 	configure()
-	RegisterParserFunc("yoink", yoinkParser)
+	RegisterParser("yoink", yoinkCommand{})
+}
+
+type yoinkCommand struct{}
+
+func (yoinkCommand) Parse(sourceFile string, sourceLine int, cmd string) (string, error) {
+	return yoinkParser(sourceFile, sourceLine, cmd)
+}
+
+func (yoinkCommand) ParseContext(ctx context.Context, sourceFile string, sourceLine int, cmd string) (string, error) {
+	return yoinkParserContext(ctx, sourceFile, sourceLine, cmd)
 }
 
 // yoinkParser parses a .yoink directive:
 //
 //	.yoink <URL|filename> [address]
 func yoinkParser(sourceFile string, sourceLine int, cmd string) (string, error) {
+	text, err := yoinkParserContext(context.Background(), sourceFile, sourceLine, cmd)
+	if err != nil {
+		return "", fmt.Errorf("%s:%d: %w", sourceFile, sourceLine, err)
+	}
+	return text, nil
+}
+
+func yoinkParserContext(ctx context.Context, sourceFile string, sourceLine int, cmd string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	cmd = strings.TrimSpace(cmd)
 
 	parts := strings.Fields(cmd)
 	if len(parts) < 2 {
-		return "", fmt.Errorf("%s:%d: syntax error for .yoink invocation", sourceFile, sourceLine)
+		return "", fmt.Errorf("syntax error for .yoink invocation")
 	}
 
 	file := parts[1]
@@ -75,20 +105,37 @@ func yoinkParser(sourceFile string, sourceLine int, cmd string) (string, error) 
 
 	if strings.HasPrefix(file, "http://") || strings.HasPrefix(file, "https://") {
 		if sem != nil {
-			sem.Acquire()
+			if err := sem.acquireContext(ctx); err != nil {
+				return "", err
+			}
 			defer sem.Release()
 		}
-		time.Sleep(throttle) // Should be a time.Ticker
+		if throttle > 0 {
+			timer := time.NewTimer(throttle)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+			case <-ctx.Done():
+				return "", ctx.Err()
+			}
+		}
 
 		uri, err := url.ParseRequestURI(file)
 		if err != nil {
 			return "", err
 		}
-		resp, err := http.Get(uri.String())
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri.String(), nil)
+		if err != nil {
+			return "", err
+		}
+		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			return "", err
 		}
 		defer resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return "", fmt.Errorf("GET %s: HTTP %s", file, resp.Status)
+		}
 
 		textBytes, err = io.ReadAll(resp.Body)
 		if err != nil {
@@ -96,15 +143,32 @@ func yoinkParser(sourceFile string, sourceLine int, cmd string) (string, error) 
 		}
 	} else {
 		filename := filepath.Join(filepath.Dir(sourceFile), file)
-		textBytes, err = os.ReadFile(filename)
+		// Special files can block indefinitely even while opening. Includes are
+		// ordinary files; do not start asynchronous reads that could outlive Parse.
+		info, err := os.Stat(filename)
 		if err != nil {
-			return "", fmt.Errorf("%s:%d: %v", sourceFile, sourceLine, err)
+			return "", err
 		}
+		if !info.Mode().IsRegular() {
+			return "", fmt.Errorf("%s: inclusion requires a regular file", filename)
+		}
+		f, err := os.Open(filename)
+		if err != nil {
+			return "", err
+		}
+		defer f.Close()
+		textBytes, err = io.ReadAll(contextReader{ctx, f})
+		if err != nil {
+			return "", err
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
 	}
 
 	lo, hi, err := addrToByteRange(addr, 0, textBytes)
 	if err != nil {
-		return "", fmt.Errorf("%s:%d: %v", sourceFile, sourceLine, err)
+		return "", err
 	}
 	if lo > hi {
 		hi, lo = lo, hi
@@ -120,25 +184,20 @@ func yoinkParser(sourceFile string, sourceLine int, cmd string) (string, error) 
 		}
 	}
 
-	return strings.Join(extractLines(textBytes, lo, hi), "\n"), nil
+	text := strings.Join(extractLines(textBytes, lo, hi), "\n")
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	return text, nil
 }
 
 // extractLines takes a source file and returns the lines that
 // span the byte range specified by start and end.
 // It discards lines that end in "OMIT".
 func extractLines(src []byte, start, end int) (lines []string) {
-	startLine := 1
-	for i, b := range src {
-		if i == start {
-			break
-		}
-		if b == '\n' {
-			startLine++
-		}
-	}
-	s := bufio.NewScanner(bytes.NewReader(src[start:end]))
-	for n := startLine; s.Scan(); n++ {
-		l := s.Text()
+	// Unlike Scanner, splitting cannot silently truncate an included long line.
+	for _, line := range bytes.Split(src[start:end], []byte{'\n'}) {
+		l := strings.TrimSuffix(string(line), "\r")
 		if strings.HasSuffix(l, "OMIT") {
 			continue
 		}
